@@ -153,6 +153,10 @@ from src.database import (
     actualizar_estado_oferta,
 )
 from src.ingesta_jobspy import ejecutar_busqueda_jobspy
+from src.ingesta_portales import (
+    ejecutar_busqueda_getonbrd,
+    ejecutar_busqueda_chiletrabajos,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -347,11 +351,20 @@ with st.sidebar:
 
     # ----- Opciones de Portales -----
     st.markdown("### 🌐 Opciones de Portales")
-    portales_disponibles = ["linkedin", "indeed", "google", "laborum", "trabajando"]
+    portales_disponibles = [
+        "linkedin",
+        "indeed",
+        "google",
+        "glassdoor",
+        "getonbrd",
+        "chiletrabajos",
+        "laborum",
+        "trabajando",
+    ]
     portales_seleccionados = st.multiselect(
         "Plataformas",
         options=portales_disponibles,
-        default=["linkedin", "indeed", "google"],
+        default=["linkedin", "indeed", "google", "getonbrd", "chiletrabajos"],
     )
 
     st.divider()
@@ -408,36 +421,74 @@ st.divider()
 if st.session_state.busqueda_activa:
     st.session_state.busqueda_activa = False
 
-    portales_jobspy = [p for p in portales_seleccionados if p in ["linkedin", "indeed", "google"]]
-    portales_playwright = [p for p in portales_seleccionados if p in ["laborum", "trabajando"]]
+    portales_jobspy = [
+        p for p in portales_seleccionados
+        if p in ["linkedin", "indeed", "google", "glassdoor"]
+    ]
+    buscar_getonbrd = "getonbrd" in portales_seleccionados
+    buscar_chiletrabajos = "chiletrabajos" in portales_seleccionados
+    portales_playwright = [
+        p for p in portales_seleccionados
+        if p in ["laborum", "trabajando"]
+    ]
 
-    progress_container = st.empty()
     status_text = st.empty()
 
     def _update_progress(msg):
         status_text.text(msg)
 
+    # 1. Búsqueda en JobSpy (LinkedIn, Indeed, Google, Glassdoor)
     if portales_jobspy:
-        with st.spinner("🔎 Buscando en portales públicos (JobSpy)..."):
+        with st.spinner(f"🔎 Buscando en {', '.join(portales_jobspy).upper()}..."):
             stats_jobspy = ejecutar_busqueda_jobspy(
                 cargos=cargos_seleccionados,
                 portales=portales_jobspy,
                 callback_progreso=_update_progress,
             )
             st.success(
-                f"✅ JobSpy: {stats_jobspy['nuevas']} nuevas, "
+                f"✅ JobSpy ({', '.join(portales_jobspy)}): {stats_jobspy['nuevas']} nuevas, "
                 f"{stats_jobspy['duplicadas']} duplicadas, "
                 f"{stats_jobspy['errores']} errores"
             )
 
+    # 2. Búsqueda en Get on Board (API)
+    if buscar_getonbrd:
+        with st.spinner("🚀 Buscando en GET ON BOARD (API Pública)..."):
+            stats_gob = ejecutar_busqueda_getonbrd(
+                cargos=cargos_seleccionados,
+                limite_por_cargo=10,
+                callback_progreso=_update_progress,
+            )
+            st.success(
+                f"✅ Get on Board: {stats_gob['nuevas']} nuevas, "
+                f"{stats_gob['duplicadas']} duplicadas, "
+                f"{stats_gob['errores']} errores"
+            )
+
+    # 3. Búsqueda en ChileTrabajos (Scraping HTTP directo)
+    if buscar_chiletrabajos:
+        with st.spinner("🇨🇱 Buscando en CHILETRABAJOS..."):
+            stats_ct = ejecutar_busqueda_chiletrabajos(
+                cargos=cargos_seleccionados,
+                limite_por_cargo=10,
+                callback_progreso=_update_progress,
+            )
+            st.success(
+                f"✅ ChileTrabajos: {stats_ct['nuevas']} nuevas, "
+                f"{stats_ct['duplicadas']} duplicadas, "
+                f"{stats_ct['errores']} errores"
+            )
+
+    # 4. Portales con sesión requerida
     if portales_playwright:
         st.info(
-            "ℹ️ Para buscar en Laborum/Trabajando, primero ejecuta el login:\n"
-            "```bash\npython -m src.ingesta_playwright --modo login\n```"
+            "ℹ️ Para buscar en Laborum/Trabajando en tu Mac, ejecuta en tu terminal:\n"
+            "```bash\npython -m src.ingesta_playwright --modo buscar --cargos 'Senior Business Analyst'\n```\n"
+            "(Requiere sesión previa con: `python -m src.ingesta_playwright --modo login`)"
         )
 
     status_text.empty()
-    progress_container.empty()
+    st.rerun()
     st.rerun()
 
 # ----- KPIs -----
