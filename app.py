@@ -122,18 +122,34 @@ st.markdown("""
     .cv-card {
         background: #1e1e2e;
         border-radius: 10px;
-        padding: 14px;
+        padding: 12px 14px;
         border: 1px solid #3d3d5c;
-        margin-bottom: 16px;
+        margin-bottom: 12px;
     }
     .cv-status {
         display: inline-block;
-        padding: 3px 10px;
-        border-radius: 10px;
-        font-size: 0.78rem;
+        padding: 2px 8px;
+        border-radius: 8px;
+        font-size: 0.75rem;
         font-weight: 600;
         background: #166534;
         color: #4ade80;
+    }
+
+    /* Radar Scanning Active Banner */
+    .radar-scanning {
+        background: linear-gradient(90deg, #1e3a5f 0%, #1e1e2e 50%, #1e3a5f 100%);
+        border: 1px solid #3b82f6;
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin: 16px 0;
+        text-align: center;
+        animation: pulse-glow 2s infinite ease-in-out;
+    }
+    @keyframes pulse-glow {
+        0% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.2); }
+        50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
+        100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.2); }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -290,14 +306,15 @@ def render_offer_card(oferta: dict):
 
 
 # =====================================================================
-# BARRA LATERAL
+# BARRA LATERAL (Panel Ergonómico de Control)
 # =====================================================================
 with st.sidebar:
-    st.title("⚙️ Panel de Control")
+    st.title("⚙️ Radar de Control")
 
-    # ----- Diagnóstico del CV -----
-    st.markdown("### 📄 Diagnóstico del CV Maestro")
+    # ----- 1. SECCIÓN INGESTA & RASTREO -----
+    st.markdown("### 🚀 Rastreo e Ingesta")
 
+    # Diagnóstico del CV Maestro
     if st.session_state.cv_data is None:
         with st.spinner("Cargando CV..."):
             cargar_cv()
@@ -310,14 +327,14 @@ with st.sidebar:
             f'<div class="cv-card">'
             f'<strong>📁 {cv["nombre_archivo"]}</strong><br>'
             f'<span class="cv-status">● Activo</span><br>'
-            f'<span style="font-size:0.78rem; color:#94a3b8;">'
-            f'Actualizado: {cv["actualizado"][:10]}<br>'
-            f'Hash: <code>{cv_hash_short}...</code>'
+            f'<span style="font-size:0.75rem; color:#94a3b8;">'
+            f'Actualizado: {cv["actualizado"][:10]} · '
+            f'Hash: <code>{cv_hash_short}</code>'
             f'</span></div>'
         )
         st.markdown(cv_html, unsafe_allow_html=True)
 
-        if st.button("🔄 Re-analizar PDF", use_container_width=True):
+        if st.button("🔄 Re-analizar PDF con IA", use_container_width=True):
             with st.spinner("Re-analizando CV con Gemini..."):
                 st.session_state.cv_data = leer_cv_pdf_integro()
                 st.session_state.estrategia = obtener_estrategia_busqueda_desde_cv(
@@ -326,30 +343,24 @@ with st.sidebar:
             st.success("✅ CV re-analizado")
             st.rerun()
     else:
-        st.error("❌ No se pudo cargar el CV. Verifica CV_PDF_PATH en .env")
+        st.error("❌ No se pudo cargar el CV. Verifica CV_PDF_PATH")
 
-    st.divider()
-
-    # ----- Estrategia de Búsqueda -----
-    st.markdown("### 🎯 Estrategia de Búsqueda")
-    st.caption("Auto-detección desde el CV")
-
-    cargos_seleccionados = []
+    # Cargos Objetivo (Selector ergonómico)
+    cargos_disponibles = []
     if st.session_state.estrategia:
-        estrategia = st.session_state.estrategia
-        cargos_disponibles = estrategia.get("cargos_objetivo_busqueda", [])
+        cargos_disponibles = st.session_state.estrategia.get("cargos_objetivo_busqueda", [])
 
-        for i, cargo in enumerate(cargos_disponibles):
-            checked = st.checkbox(cargo, value=True, key=f"cargo_{i}")
-            if checked:
-                cargos_seleccionados.append(cargo)
-    else:
-        st.warning("⚠️ Carga el CV para ver los cargos detectados.")
+    st.markdown("#### 🎯 Cargos Objetivo")
+    cargos_seleccionados = st.multiselect(
+        "Cargos activos para la búsqueda:",
+        options=cargos_disponibles,
+        default=cargos_disponibles,
+        placeholder="Selecciona uno o más cargos...",
+        help="Cargos extraídos automáticamente por IA desde tu CV. Puedes remover o agregar."
+    )
 
-    st.divider()
-
-    # ----- Opciones de Portales -----
-    st.markdown("### 🌐 Opciones de Portales")
+    # Opciones de Portales
+    st.markdown("#### 🌐 Portales de Empleo")
     portales_disponibles = [
         "linkedin",
         "indeed",
@@ -361,26 +372,28 @@ with st.sidebar:
         "trabajando",
     ]
     portales_seleccionados = st.multiselect(
-        "Plataformas",
+        "Plataformas activas:",
         options=portales_disponibles,
         default=["linkedin", "indeed", "google", "getonbrd", "chiletrabajos"],
+        placeholder="Elige portales...",
     )
 
-    st.divider()
-
-    # ----- Botón de Búsqueda -----
-    if st.button(
+    # Botón Principal de Acción (CTA Prominente)
+    st.markdown("<div style='margin-top: 14px;'></div>", unsafe_allow_html=True)
+    btn_buscar = st.button(
         "🔍 Ejecutar Búsqueda en Portales",
         use_container_width=True,
         type="primary",
-        disabled=not cargos_seleccionados,
-    ):
+        disabled=not cargos_seleccionados or not portales_seleccionados,
+    )
+    if btn_buscar:
         st.session_state.busqueda_activa = True
 
     st.divider()
 
-    # ----- Filtros Rápidos -----
-    st.markdown("### 🔧 Filtros Rápidos")
+    # ----- 2. SECCIÓN FILTROS DE BIBLIOTECA -----
+    st.markdown("### 📂 Filtros de Biblioteca")
+    st.caption("Filtra las ofertas ya evaluadas y guardadas")
 
     filtro_veredicto = st.multiselect(
         "Veredicto",
@@ -389,7 +402,7 @@ with st.sidebar:
     )
 
     filtro_score = st.slider(
-        "Score mínimo (%)",
+        "Score mínimo de calce (%)",
         min_value=0,
         max_value=100,
         value=70,
@@ -397,28 +410,64 @@ with st.sidebar:
     )
 
     filtro_estado = st.multiselect(
-        "Estado",
+        "Estado de postulación",
         options=["NUEVA", "GUARDADA", "POSTULADO", "DESCARTADA"],
         default=["NUEVA", "GUARDADA"],
     )
 
 
 # =====================================================================
-# ÁREA PRINCIPAL
+# ÁREA PRINCIPAL (Dashboard Ejecutivo)
 # =====================================================================
 
-# ----- Encabezado -----
+# ----- 1. Encabezado -----
 st.markdown("# 🔍 Radar de Empleos JPTN")
 st.markdown(
     "*Sistema automatizado de descubrimiento, evaluación semántica "
-    "y gestión de ofertas laborales*"
+    "y gestión de ofertas laborales asistido por IA*"
 )
+
+# ----- 2. Métricas KPI Siempre Visibles (Embudo de Conversión) -----
+try:
+    metricas = obtener_metricas_resumen()
+except Exception:
+    metricas = {
+        "ofertas_totales": 0,
+        "recomendadas_postular": 0,
+        "postulados": 0,
+        "por_revisar": 0,
+    }
+
+kcol1, kcol2, kcol3, kcol4 = st.columns(4)
+with kcol1:
+    render_kpi_card("Ofertas Totales", metricas["ofertas_totales"], "kpi-white")
+with kcol2:
+    render_kpi_card("Recomendadas (Postular)", metricas["recomendadas_postular"], "kpi-green")
+with kcol3:
+    render_kpi_card("Postulados", metricas["postulados"], "kpi-blue")
+with kcol4:
+    render_kpi_card("Por Revisar", metricas["por_revisar"], "kpi-orange")
 
 st.divider()
 
-# ----- Ejecución de búsqueda -----
+# ----- 3. Ejecución de Búsqueda Activa (Estado de Carga y Feedback) -----
 if st.session_state.busqueda_activa:
     st.session_state.busqueda_activa = False
+
+    banner_holder = st.empty()
+    banner_holder.markdown("""
+    <div class="radar-scanning">
+        <h3 style="margin: 0 0 6px 0; color: #60a5fa;">📡 Radar en Operación — Escaneando Portales</h3>
+        <p style="margin: 0; font-size: 0.88rem; color: #cbd5e1;">
+            Rastreando avisos en Chile, aplicando filtro anti-duplicados (0 tokens) y evaluando con IA...
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    status_ticker = st.empty()
+
+    def _update_progress(msg):
+        status_ticker.info(msg)
 
     portales_jobspy = [
         p for p in portales_seleccionados
@@ -431,91 +480,56 @@ if st.session_state.busqueda_activa:
         if p in ["laborum", "trabajando"]
     ]
 
-    status_text = st.empty()
+    total_nuevas = 0
+    total_duplicadas = 0
 
-    def _update_progress(msg):
-        status_text.text(msg)
-
-    # 1. Búsqueda en JobSpy (LinkedIn, Indeed, Google, Glassdoor)
+    # JobSpy
     if portales_jobspy:
-        with st.spinner(f"🔎 Buscando en {', '.join(portales_jobspy).upper()}..."):
+        with st.spinner(f"🔎 Rastreando en {', '.join(portales_jobspy).upper()}..."):
             stats_jobspy = ejecutar_busqueda_jobspy(
                 cargos=cargos_seleccionados,
                 portales=portales_jobspy,
                 callback_progreso=_update_progress,
             )
-            st.success(
-                f"✅ JobSpy ({', '.join(portales_jobspy)}): {stats_jobspy['nuevas']} nuevas, "
-                f"{stats_jobspy['duplicadas']} duplicadas, "
-                f"{stats_jobspy['errores']} errores"
-            )
+            total_nuevas += stats_jobspy.get("nuevas", 0)
+            total_duplicadas += stats_jobspy.get("duplicadas", 0)
 
-    # 2. Búsqueda en Get on Board (API)
+    # Get on Board
     if buscar_getonbrd:
-        with st.spinner("🚀 Buscando en GET ON BOARD (API Pública)..."):
+        with st.spinner("🚀 Rastreando en GET ON BOARD (API)..."):
             stats_gob = ejecutar_busqueda_getonbrd(
                 cargos=cargos_seleccionados,
                 limite_por_cargo=10,
                 callback_progreso=_update_progress,
             )
-            st.success(
-                f"✅ Get on Board: {stats_gob['nuevas']} nuevas, "
-                f"{stats_gob['duplicadas']} duplicadas, "
-                f"{stats_gob['errores']} errores"
-            )
+            total_nuevas += stats_gob.get("nuevas", 0)
+            total_duplicadas += stats_gob.get("duplicadas", 0)
 
-    # 3. Búsqueda en ChileTrabajos (Scraping HTTP directo)
+    # ChileTrabajos
     if buscar_chiletrabajos:
-        with st.spinner("🇨🇱 Buscando en CHILETRABAJOS..."):
+        with st.spinner("🇨🇱 Rastreando en CHILETRABAJOS..."):
             stats_ct = ejecutar_busqueda_chiletrabajos(
                 cargos=cargos_seleccionados,
                 limite_por_cargo=10,
                 callback_progreso=_update_progress,
             )
-            st.success(
-                f"✅ ChileTrabajos: {stats_ct['nuevas']} nuevas, "
-                f"{stats_ct['duplicadas']} duplicadas, "
-                f"{stats_ct['errores']} errores"
-            )
+            total_nuevas += stats_ct.get("nuevas", 0)
+            total_duplicadas += stats_ct.get("duplicadas", 0)
 
-    # 4. Portales con sesión requerida
+    # Laborum / Trabajando
     if portales_playwright:
         st.info(
-            "ℹ️ Para buscar en Laborum/Trabajando en tu Mac, ejecuta en tu terminal:\n"
-            "```bash\npython -m src.ingesta_playwright --modo buscar --cargos 'Senior Business Analyst'\n```\n"
-            "(Requiere sesión previa con: `python -m src.ingesta_playwright --modo login`)"
+            "ℹ️ Para Laborum/Trabajando en tu Mac ejecuta:\n"
+            "```bash\npython -m src.ingesta_playwright --modo buscar --cargos 'Senior Business Analyst'\n```"
         )
 
-    status_text.empty()
+    banner_holder.empty()
+    status_ticker.empty()
+    st.toast(f"🎉 Barrido completado: {total_nuevas} nuevas ofertas evaluadas ({total_duplicadas} duplicadas)")
     st.rerun()
-    st.rerun()
 
-# ----- KPIs -----
-try:
-    metricas = obtener_metricas_resumen()
-except Exception:
-    metricas = {
-        "ofertas_totales": 0,
-        "recomendadas_postular": 0,
-        "postulados": 0,
-        "por_revisar": 0,
-    }
-
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    render_kpi_card("Ofertas Totales", metricas["ofertas_totales"], "kpi-white")
-with col2:
-    render_kpi_card("Recomendadas (Postular)", metricas["recomendadas_postular"], "kpi-green")
-with col3:
-    render_kpi_card("Postulados", metricas["postulados"], "kpi-blue")
-with col4:
-    render_kpi_card("Por Revisar", metricas["por_revisar"], "kpi-orange")
-
-st.divider()
-
-# ----- Listado de Ofertas -----
-st.markdown("### 📋 Ofertas Laborales")
+# ----- 4. Listado de Ofertas Laborales -----
+st.markdown("### 📋 Ofertas Laborales Evaluadas")
 
 try:
     ofertas = obtener_ofertas_filtradas(
@@ -529,29 +543,36 @@ except Exception as e:
     st.warning(f"⚠️ Error cargando ofertas: {e}")
 
 if ofertas:
-    st.caption(f"Mostrando {len(ofertas)} ofertas")
+    st.caption(f"Mostrando **{len(ofertas)}** ofertas según los filtros activos")
 
     for oferta in ofertas:
         url = render_offer_card(oferta)
         oferta_id = oferta.get("id", "")
 
-        # Fila de acciones
-        acol1, acol2, acol3 = st.columns([1, 1, 1])
+        # Fila de acciones ergonómica
+        acol1, acol2, acol3 = st.columns([1, 1.2, 1])
 
         with acol1:
             if url:
                 st.link_button("Ver Oferta 🔗", url, use_container_width=True)
 
         with acol2:
-            if st.button("📋 Copiar Ficha", key=f"copy_{oferta_id}"):
+            if st.button("📋 Copiar Ficha para CV", key=f"copy_{oferta_id}", use_container_width=True):
+                ats_list = oferta.get('keywords_ats', [])
+                if isinstance(ats_list, str):
+                    try:
+                        ats_list = json.loads(ats_list)
+                    except Exception:
+                        ats_list = []
+
                 ficha = (
-                    f"TÍTULO: {oferta.get('titulo', '')}\n"
+                    f"CARGO: {oferta.get('titulo', '')}\n"
                     f"EMPRESA: {oferta.get('empresa', '')}\n"
                     f"MATCH: {oferta.get('score_match', '')}%\n"
                     f"VEREDICTO: {oferta.get('veredicto', '')}\n"
-                    f"ROL: {oferta.get('rol_detectado', '')}\n"
-                    f"ENFOQUE: {oferta.get('enfoque_cv_sugerido', '')}\n"
-                    f"KEYWORDS ATS: {', '.join(oferta.get('keywords_ats', []) if isinstance(oferta.get('keywords_ats'), list) else [])}\n"
+                    f"PRETENSIÓN SUGERIDA: {oferta.get('pretension_sugerida', '')}\n"
+                    f"ENFOQUE CV: {oferta.get('enfoque_cv_sugerido', '')}\n"
+                    f"KEYWORDS ATS: {', '.join(ats_list)}\n"
                     f"URL: {url}\n"
                 )
                 st.code(ficha, language="text")
@@ -562,7 +583,7 @@ if ofertas:
             idx = estados_opciones.index(estado_actual) if estado_actual in estados_opciones else 0
 
             nuevo_estado = st.selectbox(
-                "Estado",
+                "Estado de la postulación",
                 options=estados_opciones,
                 index=idx,
                 key=f"estado_{oferta_id}",
@@ -571,14 +592,15 @@ if ofertas:
             if nuevo_estado != estado_actual:
                 try:
                     actualizar_estado_oferta(oferta_id, nuevo_estado)
-                    st.toast(f"✅ Estado actualizado a {nuevo_estado}")
+                    st.toast(f"✅ Estado actualizado a: {nuevo_estado}")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-        st.markdown("---")
+        st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 else:
     st.info(
-        "🔍 No hay ofertas que coincidan con los filtros actuales.\n\n"
-        "Usa el panel lateral para ejecutar una búsqueda o ajustar los filtros."
+        "🔍 **No hay ofertas que coincidan con los filtros actuales.**\n\n"
+        "• Ajusta los filtros de veredicto o el score mínimo en la barra lateral.\n"
+        "• O haz clic en **'🔍 Ejecutar Búsqueda en Portales'** para rastrear nuevas oportunidades."
     )
