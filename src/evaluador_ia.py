@@ -121,6 +121,12 @@ Evalúa esta oferta contra el CV del candidato siguiendo las reglas establecidas
         except Exception:
             pass
 
+    if not api_key:
+        raise ValueError(
+            "No se encontró GEMINI_API_KEY. Si estás en Streamlit Cloud, "
+            "configúrala en el menú 'Settings > Secrets' de tu aplicación."
+        )
+
     client = genai.Client(api_key=api_key)
 
     # Intentar con gemini-3.5-flash o modelos de respaldo ante alta demanda

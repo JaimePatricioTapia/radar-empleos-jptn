@@ -199,6 +199,12 @@ def obtener_estrategia_busqueda_desde_cv(
         except Exception:
             pass
 
+    if not api_key:
+        raise ValueError(
+            "No se encontró GEMINI_API_KEY. Si estás en Streamlit Cloud, "
+            "configúrala en el menú 'Settings > Secrets' de tu aplicación."
+        )
+
     client = genai.Client(api_key=api_key)
 
     prompt = f"""Analiza el siguiente Currículum Vitae completo y extrae la información
