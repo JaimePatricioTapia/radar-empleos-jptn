@@ -1,0 +1,9 @@
+.env
+archivo_de_configuraci_n_local.md
+.venv/
+venv/
+browser_session/
+data/cache_*.json
+__pycache__/
+*.pyc
+.DS_Store
