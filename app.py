@@ -187,18 +187,19 @@ def cargar_cv():
 
 def render_kpi_card(label: str, value, css_class: str = "kpi-white"):
     """Renderiza una tarjeta KPI con estilos."""
-    st.markdown(f"""
-    <div class="kpi-card {css_class}">
-        <div class="kpi-label">{label}</div>
-        <div class="kpi-value">{value}</div>
-    </div>
-    """, unsafe_allow_html=True)
+    html_kpi = (
+        f'<div class="kpi-card {css_class}">'
+        f'<div class="kpi-label">{label}</div>'
+        f'<div class="kpi-value">{value}</div>'
+        f'</div>'
+    )
+    st.markdown(html_kpi, unsafe_allow_html=True)
 
 
 def render_offer_card(oferta: dict):
     """Renderiza una tarjeta de oferta laboral estilizada."""
     score = oferta.get("score_match", 0) or 0
-    veredicto = oferta.get("veredicto", "").upper()
+    veredicto = str(oferta.get("veredicto", "")).upper()
 
     # Clases CSS según veredicto
     card_class = "descartar"
@@ -244,7 +245,7 @@ def render_offer_card(oferta: dict):
         except json.JSONDecodeError:
             keywords = []
 
-    # Construir HTML
+    # Construir Badges
     fortalezas_html = "".join(
         f'<span class="badge badge-green">✓ {f}</span> ' for f in fortalezas[:5]
     )
@@ -255,37 +256,35 @@ def render_offer_card(oferta: dict):
         f'<span class="badge badge-blue">{k}</span> ' for k in keywords[:8]
     )
 
-    meta_parts = [p for p in [empresa, ubicacion, modalidad, portal.upper()] if p]
+    # Limpiar metadata (evitar "nan")
+    meta_parts = [
+        str(p).strip() for p in [empresa, ubicacion, modalidad, portal.upper()]
+        if p and str(p).lower() not in ("nan", "none", "")
+    ]
     meta_str = " · ".join(meta_parts)
 
-    st.markdown(f"""
-    <div class="offer-card {card_class}">
-        <div class="offer-header">
-            <div>
-                <div class="offer-title">{titulo}</div>
-                <div class="offer-meta">{meta_str}</div>
-            </div>
-            <div class="offer-score {score_class}">{score}%</div>
-        </div>
+    card_html = (
+        f'<div class="offer-card {card_class}">'
+        f'<div class="offer-header">'
+        f'<div><div class="offer-title">{titulo}</div><div class="offer-meta">{meta_str}</div></div>'
+        f'<div class="offer-score {score_class}">{score}%</div>'
+        f'</div>'
+        f'<div class="offer-salary">'
+        f'<span>💰 Renta estimada: <strong>{renta_est}</strong></span>'
+        f'<span>🎯 Pretensión sugerida: <strong>{pretension}</strong></span>'
+        f'</div>'
+        f'<div class="offer-section-title">🎯 Enfoque CV sugerido</div>'
+        f'<div style="font-size: 0.88rem; color: #cbd5e1; margin-bottom: 8px;">{enfoque}</div>'
+        f'<div class="offer-section-title">✅ Fortalezas</div>'
+        f'<div>{fortalezas_html or "<span style=\'color:#666;\'>—</span>"}</div>'
+        f'<div class="offer-section-title">⚠️ Brechas</div>'
+        f'<div>{brechas_html or "<span style=\'color:#666;\'>—</span>"}</div>'
+        f'<div class="offer-section-title">🔑 Keywords ATS</div>'
+        f'<div>{keywords_html or "<span style=\'color:#666;\'>—</span>"}</div>'
+        f'</div>'
+    )
 
-        <div class="offer-salary">
-            <span>💰 Renta estimada: <strong>{renta_est}</strong></span>
-            <span>🎯 Pretensión sugerida: <strong>{pretension}</strong></span>
-        </div>
-
-        <div class="offer-section-title">🎯 Enfoque CV sugerido</div>
-        <div style="font-size: 0.88rem; color: #cbd5e1; margin-bottom: 8px;">{enfoque}</div>
-
-        <div class="offer-section-title">✅ Fortalezas</div>
-        <div>{fortalezas_html or '<span style="color:#666;">—</span>'}</div>
-
-        <div class="offer-section-title">⚠️ Brechas</div>
-        <div>{brechas_html or '<span style="color:#666;">—</span>'}</div>
-
-        <div class="offer-section-title">🔑 Keywords ATS</div>
-        <div>{keywords_html or '<span style="color:#666;">—</span>'}</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(card_html, unsafe_allow_html=True)
 
     return url
 
@@ -307,16 +306,16 @@ with st.sidebar:
         cv = st.session_state.cv_data
         cv_hash_short = cv["hash"][:12]
 
-        st.markdown(f"""
-        <div class="cv-card">
-            <strong>📁 {cv['nombre_archivo']}</strong><br>
-            <span class="cv-status">● Activo</span><br>
-            <span style="font-size:0.78rem; color:#94a3b8;">
-                Actualizado: {cv['actualizado'][:10]}<br>
-                Hash: <code>{cv_hash_short}...</code>
-            </span>
-        </div>
-        """, unsafe_allow_html=True)
+        cv_html = (
+            f'<div class="cv-card">'
+            f'<strong>📁 {cv["nombre_archivo"]}</strong><br>'
+            f'<span class="cv-status">● Activo</span><br>'
+            f'<span style="font-size:0.78rem; color:#94a3b8;">'
+            f'Actualizado: {cv["actualizado"][:10]}<br>'
+            f'Hash: <code>{cv_hash_short}...</code>'
+            f'</span></div>'
+        )
+        st.markdown(cv_html, unsafe_allow_html=True)
 
         if st.button("🔄 Re-analizar PDF", use_container_width=True):
             with st.spinner("Re-analizando CV con Gemini..."):
