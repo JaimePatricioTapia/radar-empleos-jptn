@@ -129,8 +129,13 @@ Evalúa esta oferta contra el CV del candidato siguiendo las reglas establecidas
 
     client = genai.Client(api_key=api_key)
 
-    # Intentar con gemini-3.5-flash o modelos de respaldo ante alta demanda
-    modelos = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest"]
+    # Modelos con alta disponibilidad y cuota generosa
+    modelos = [
+        "gemini-3.1-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash",
+        "gemini-3.8-flash",
+    ]
     ultimo_error = None
 
     for m in modelos:

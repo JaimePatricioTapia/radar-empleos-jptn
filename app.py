@@ -336,12 +336,15 @@ with st.sidebar:
 
         if st.button("🔄 Re-analizar PDF con IA", use_container_width=True):
             with st.spinner("Re-analizando CV con Gemini..."):
-                st.session_state.cv_data = leer_cv_pdf_integro()
-                st.session_state.estrategia = obtener_estrategia_busqueda_desde_cv(
-                    forzar_recalculo=True
-                )
-            st.success("✅ CV re-analizado")
-            st.rerun()
+                try:
+                    st.session_state.cv_data = leer_cv_pdf_integro()
+                    st.session_state.estrategia = obtener_estrategia_busqueda_desde_cv(
+                        forzar_recalculo=True
+                    )
+                    st.success("✅ CV re-analizado")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"⚠️ No se pudo re-analizar el CV: {e}")
     else:
         st.error("❌ No se pudo cargar el CV. Verifica CV_PDF_PATH")
 
