@@ -52,21 +52,46 @@ REGLAS OBLIGATORIAS:
    - DevOps puro (SRE, Infrastructure Engineer de carrera)
    - Inglés conversacional excluyente (cuando la oferta requiere inglés avanzado/nativo como requisito eliminatorio)
 
-3. TASACIÓN SALARIAL:
+3. BONIFICACIÓN SECTOR MINERO-TECNOLÓGICO:
+   - El candidato es Ingeniero Civil de Minas con experiencia comprobada en transformación
+     digital, Business Analysis, IA y gestión ágil. Este perfil híbrido es EXTREMADAMENTE
+     RARO en el mercado chileno.
+   - Si la oferta combina MINERÍA + TECNOLOGÍA (transformación digital, IA, automatización,
+     sistemas de información, gestión de proyectos TI en minería), otorgar un BONUS de
+     +10 a +15 puntos en el score_match, ya que el candidato tiene una ventaja competitiva
+     diferenciadora sobre otros postulantes.
+   - Ejemplos de roles bonificados: Business Analyst en minería, Ingeniero de Transformación
+     Digital minero, Especialista TI en faena, Project Manager TI en compañías mineras,
+     Analista Funcional para proyectos de integración en minería, Coordinador de proyectos
+     tecnológicos en minería.
+   - Empresas del sector donde aplicar bonus: consultoras que prestan servicios a mineras
+     (VMICA, Turner & Townsend, Arcadis, CyD Ingeniería, Bechtel, Worley, Hatch, Ausenco),
+     mineras directas (CODELCO, BHP, Antofagasta Minerals, SQM, Anglo American, Teck,
+     Freeport-McMoRan, Lundin Mining), y proveedores tecnológicos mineros (ABB, Siemens,
+     Schneider Electric, Hexagon Mining, Epiroc, Komatsu, Caterpillar/Finning).
+
+4. TASACIÓN SALARIAL:
    - `renta_estimada_empresa`: Estima el rango salarial real que la empresa pagaría por
      este cargo en Chile (líquido mensual CLP), considerando el mercado, tamaño de empresa
      y responsabilidades.
    - `pretension_sugerida`: Fija la pretensión del candidato en el "punto dulce"
      (mitad inferior a media del rango), para maximizar competitividad.
+   - Para cargos en MINERÍA: considerar que los salarios del sector minero en Chile son
+     típicamente 20-40% superiores al promedio del mercado TI general, especialmente en
+     roles presenciales en faena o con turnos rotativos.
 
-4. KEYWORDS ATS: Extrae las keywords que los sistemas ATS buscarán en el CV del candidato
+5. KEYWORDS ATS: Extrae las keywords que los sistemas ATS buscarán en el CV del candidato
    para pasar los filtros automáticos de esta oferta específica.
 
-5. ENFOQUE CV SUGERIDO: Indica específicamente qué experiencias, logros y competencias
+6. ENFOQUE CV SUGERIDO: Indica específicamente qué experiencias, logros y competencias
    del CV debe destacar el candidato para esta oferta particular.
+   - Para ofertas del SECTOR MINERO: destacar explícitamente el título de Ingeniero Civil
+     de Minas, la comprensión de procesos operacionales mineros, y la capacidad de traducir
+     necesidades del negocio minero a soluciones tecnológicas.
 
-6. El score_match debe reflejar honestamente el calce real: 0-30 bajo, 31-50 parcial,
-   51-70 moderado, 71-85 alto, 86-100 excelente.
+7. El score_match debe reflejar honestamente el calce real: 0-30 bajo, 31-50 parcial,
+   51-70 moderado, 71-85 alto, 86-100 excelente. Aplicar la bonificación minera DESPUÉS
+   de la evaluación base, sin superar 100.
 """
 
 

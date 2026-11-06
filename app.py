@@ -172,6 +172,7 @@ from src.ingesta_jobspy import ejecutar_busqueda_jobspy
 from src.ingesta_portales import (
     ejecutar_busqueda_getonbrd,
     ejecutar_busqueda_chiletrabajos,
+    ejecutar_busqueda_bne,
 )
 
 
@@ -199,6 +200,29 @@ def cargar_cv():
     except Exception as e:
         st.error(f"❌ Error cargando CV: {e}")
         return False
+
+
+def es_oferta_mineria(oferta: dict) -> bool:
+    """Detecta si una oferta pertenece al sector minero o afines."""
+    terminos_mineria = [
+        "minería", "mineria", "minero", "minera", "mining", "faena", "rajo",
+        "subterránea", "subterranea", "concentradora", "lixiviación", "lixiviacion",
+        "fundición", "fundicion", "relave", "flotación", "flotacion", "chancado",
+        "codelco", "bhp", "antofagasta minerals", "sqm", "anglo american", "teck",
+        "collahuasi", "escondida", "pelambres", "centinela", "candelaria", "freeport",
+        "albemarle", "cyd ingeniería", "cyd ingenieria", "cyd", "turner & townsend",
+        "vmica", "ausenco", "bechtel", "hatch", "worley", "wood", "flsmidth",
+        "metso", "komatsu", "finning", "liebherr", "veridapt"
+    ]
+    campos = [
+        oferta.get("titulo", ""),
+        oferta.get("rol_detectado", ""),
+        oferta.get("empresa", ""),
+        oferta.get("enfoque_cv_sugerido", ""),
+        oferta.get("descripcion_cruda", "")[:1200],
+    ]
+    texto = " ".join(str(c).lower() for c in campos)
+    return any(t in texto for t in terminos_mineria)
 
 
 def render_kpi_card(label: str, value, css_class: str = "kpi-white"):
@@ -279,10 +303,15 @@ def render_offer_card(oferta: dict):
     ]
     meta_str = " · ".join(meta_parts)
 
+    mineria_badge = (
+        '<span class="badge" style="background:#78350f; color:#fef3c7; border:1px solid #d97706; font-size:0.75rem; vertical-align:middle; margin-right:6px;">⛏️ MINERÍA</span>'
+        if es_oferta_mineria(oferta) else ""
+    )
+
     card_html = (
         f'<div class="offer-card {card_class}">'
         f'<div class="offer-header">'
-        f'<div><div class="offer-title">{titulo}</div><div class="offer-meta">{meta_str}</div></div>'
+        f'<div><div class="offer-title">{mineria_badge}{titulo}</div><div class="offer-meta">{meta_str}</div></div>'
         f'<div class="offer-score {score_class}">{score}%</div>'
         f'</div>'
         f'<div class="offer-salary">'
@@ -369,15 +398,16 @@ with st.sidebar:
         "indeed",
         "google",
         "glassdoor",
-        "getonbrd",
+        "bne",
         "chiletrabajos",
+        "getonbrd",
         "laborum",
         "trabajando",
     ]
     portales_seleccionados = st.multiselect(
         "Plataformas activas:",
         options=portales_disponibles,
-        default=["linkedin", "indeed", "google", "getonbrd", "chiletrabajos"],
+        default=["linkedin", "indeed", "google", "bne", "chiletrabajos", "getonbrd"],
         placeholder="Elige portales...",
     )
 
@@ -416,6 +446,18 @@ with st.sidebar:
         "Estado de postulación",
         options=["NUEVA", "GUARDADA", "POSTULADO", "DESCARTADA"],
         default=["NUEVA", "GUARDADA"],
+    )
+
+    st.markdown("#### ⛏️ Priorización Sectorial")
+    priorizar_mineria = st.checkbox(
+        "⛏️ Priorizar Minería primero",
+        value=True,
+        help="Muestra primero las ofertas del sector minero ordenadas por afinidad (% match descendente), seguidas del resto también en afinidad descendente.",
+    )
+    solo_mineria = st.checkbox(
+        "Solo sector Minero",
+        value=False,
+        help="Filtra y muestra exclusivamente oportunidades vinculadas a minería.",
     )
 
 
@@ -478,6 +520,7 @@ if st.session_state.busqueda_activa:
     ]
     buscar_getonbrd = "getonbrd" in portales_seleccionados
     buscar_chiletrabajos = "chiletrabajos" in portales_seleccionados
+    buscar_bne = "bne" in portales_seleccionados
     portales_playwright = [
         p for p in portales_seleccionados
         if p in ["laborum", "trabajando"]
@@ -496,6 +539,17 @@ if st.session_state.busqueda_activa:
             )
             total_nuevas += stats_jobspy.get("nuevas", 0)
             total_duplicadas += stats_jobspy.get("duplicadas", 0)
+
+    # Bolsa Nacional de Empleo (BNE)
+    if buscar_bne:
+        with st.spinner("🇨🇱 Rastreando en BNE (Bolsa Nacional de Empleo)..."):
+            stats_bne = ejecutar_busqueda_bne(
+                cargos=cargos_seleccionados,
+                limite_por_cargo=10,
+                callback_progreso=_update_progress,
+            )
+            total_nuevas += stats_bne.get("nuevas", 0)
+            total_duplicadas += stats_bne.get("duplicadas", 0)
 
     # Get on Board
     if buscar_getonbrd:
@@ -546,7 +600,38 @@ except Exception as e:
     st.warning(f"⚠️ Error cargando ofertas: {e}")
 
 if ofertas:
-    st.caption(f"Mostrando **{len(ofertas)}** ofertas según los filtros activos")
+    # Filtro opcional: solo minería
+    if solo_mineria:
+        ofertas = [o for o in ofertas if es_oferta_mineria(o)]
+
+    # Ordenamiento por prioridad:
+    # 1. Minería primero
+    # 2. Porcentaje de afinidad (% score_match) DESCENDENTE
+    # 3. Fecha de extracción más reciente
+    if priorizar_mineria:
+        ofertas = sorted(
+            ofertas,
+            key=lambda o: (
+                1 if es_oferta_mineria(o) else 0,
+                o.get("score_match", 0) or 0,
+                str(o.get("fecha_extraccion", "")),
+            ),
+            reverse=True,
+        )
+    else:
+        ofertas = sorted(
+            ofertas,
+            key=lambda o: (
+                o.get("score_match", 0) or 0,
+                str(o.get("fecha_extraccion", "")),
+            ),
+            reverse=True,
+        )
+
+    cant_mineria = sum(1 for o in ofertas if es_oferta_mineria(o))
+    detalle_mineria = f"⛏️ {cant_mineria} del sector minero · " if cant_mineria > 0 else ""
+    orden_msg = "Minería y afinidad alta primero" if priorizar_mineria else "mayor afinidad primero"
+    st.caption(f"Mostrando **{len(ofertas)}** ofertas ({detalle_mineria}ordenadas por {orden_msg})")
 
     for oferta in ofertas:
         url = render_offer_card(oferta)

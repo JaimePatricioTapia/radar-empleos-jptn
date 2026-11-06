@@ -36,7 +36,7 @@ DEFAULT_CV_DIR = (
 class EstrategiaBusquedaCV(BaseModel):
     """Estructura devuelta por Gemini al analizar el CV."""
     resumen_ejecutivo_detectado: str
-    cargos_objetivo_busqueda: list[str]  # 8 a 10 cargos
+    cargos_objetivo_busqueda: list[str]  # 15 a 18 cargos (priorizando sector minero)
     keywords_tecnicas: list[str]
     lineas_rojas_detectadas: list[str]
 
@@ -212,11 +212,22 @@ solicitada en formato JSON estructurado.
 
 INSTRUCCIONES:
 1. `resumen_ejecutivo_detectado`: Resumen de 2-3 oraciones del perfil profesional.
-2. `cargos_objetivo_busqueda`: Lista de 8 a 10 cargos/títulos laborales reales
+2. `cargos_objetivo_busqueda`: Lista de 15 a 18 cargos/títulos laborales reales
    que este candidato debería buscar en portales de empleo chilenos. Incluye
    variaciones en español e inglés según corresponda.
-3. `keywords_tecnicas`: Lista de 15-25 keywords técnicas, herramientas,
-   metodologías y competencias clave del candidato.
+   PRIORIDAD MÁXIMA: Si el candidato tiene formación o experiencia en MINERÍA,
+   los PRIMEROS 6-8 cargos DEBEN ser roles que combinen minería con tecnología,
+   transformación digital, business analysis o gestión de proyectos TI en el
+   sector minero. Ejemplos: "Business Analyst Minería", "Ingeniero Transformación
+   Digital Minería", "Analista Funcional Minería", "Project Manager TI Minería",
+   "Consultor Transformación Digital Mining", "Especialista TI Minería",
+   "Coordinador Proyectos Tecnológicos Minería", "Ingeniero de Datos Minería".
+   Los cargos restantes pueden ser genéricos del perfil profesional.
+3. `keywords_tecnicas`: Lista de 15-30 keywords técnicas, herramientas,
+   metodologías y competencias clave del candidato. Si tiene formación minera,
+   incluir keywords sectoriales: minería, mining, faena, planta, MoC, TTO,
+   sistema de control, SAP PM, PI System, OT, y nombres de empresas mineras
+   relevantes en Chile.
 4. `lineas_rojas_detectadas`: Restricciones, limitaciones o notas que el
    candidato declara explícitamente (ej: disponibilidad, ubicación, etc.).
 

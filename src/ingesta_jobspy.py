@@ -48,7 +48,15 @@ def ejecutar_busqueda_jobspy(
     if portales is None:
         portales = ["linkedin", "indeed", "google"]
 
-    ubicaciones = ["Santiago, Chile", "Chile"]
+    # Ubicaciones expandidas: regiones mineras prioritarias + generales
+    ubicaciones = [
+        "Antofagasta, Chile",
+        "Calama, Chile",
+        "Copiapó, Chile",
+        "Atacama, Chile",
+        "Santiago, Chile",
+        "Chile",
+    ]
 
     stats = {
         "total_encontradas": 0,

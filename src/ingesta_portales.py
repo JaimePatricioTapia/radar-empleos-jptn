@@ -2,6 +2,7 @@
 src/ingesta_portales.py — Conectores directos para portales estratégicos chilenos:
 - Get on Board (API Pública JSON)
 - ChileTrabajos (Scraping HTTP directo)
+- Bolsa Nacional de Empleo - BNE (API REST Pública)
 """
 
 import html
@@ -289,5 +290,149 @@ def ejecutar_busqueda_chiletrabajos(
         except Exception as e:
             stats["errores"] += 1
             stats["detalle_errores"].append(f"Error buscando '{cargo}' en ChileTrabajos: {e}")
+
+    return stats
+
+
+# ===========================================================================
+# 3. BOLSA NACIONAL DE EMPLEO - BNE (API REST Pública)
+# ===========================================================================
+
+def ejecutar_busqueda_bne(
+    cargos: list[str],
+    limite_por_cargo: int = 15,
+    callback_progreso=None,
+) -> dict:
+    """Busca ofertas en la Bolsa Nacional de Empleo (BNE) mediante su API REST pública.
+
+    Excelente para cargos en minería, ingeniería, analistas y sector público/privado
+    en todas las regiones de Chile (Antofagasta, Calama, Atacama, Santiago, etc.).
+    """
+    stats = {
+        "portal": "bne",
+        "total_encontradas": 0,
+        "nuevas": 0,
+        "duplicadas": 0,
+        "errores": 0,
+        "detalle_errores": [],
+    }
+
+    try:
+        cv_data = leer_cv_pdf_integro()
+        texto_cv = cv_data["texto"]
+    except Exception as e:
+        stats["detalle_errores"].append(f"Error leyendo CV: {e}")
+        return stats
+
+    headers = {
+        **HEADERS_DEFAULT,
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json",
+    }
+
+    for cargo in cargos:
+        if callback_progreso:
+            callback_progreso(f"🇨🇱 Buscando '{cargo}' en BNE (Bolsa Nacional de Empleo)...")
+
+        try:
+            api_url = f"https://www.bne.cl/api/ofertas/busqueda?page=0&size={limite_por_cargo}"
+            payload = {
+                "textoBusqueda": cargo,
+            }
+            resp = requests.post(api_url, json=payload, headers=headers, timeout=15)
+
+            if resp.status_code != 200:
+                stats["errores"] += 1
+                stats["detalle_errores"].append(f"BNE status {resp.status_code} para '{cargo}'")
+                continue
+
+            data = resp.json().get("content", [])
+
+            for item in data:
+                try:
+                    stats["total_encontradas"] += 1
+                    id_oferta = item.get("id")
+                    if not id_oferta:
+                        continue
+
+                    titulo = str(item.get("nombrePuesto", "Sin título")).strip()
+                    url_oferta = f"https://www.bne.cl/ofertas/{id_oferta}"
+
+                    # Empresa
+                    empresario = item.get("empresario") or {}
+                    empresa = empresario.get("nombreComercial") or "Empresa Registrada BNE"
+
+                    # Ubicación
+                    region_obj = item.get("region") or {}
+                    comuna_obj = item.get("comuna") or {}
+                    region = region_obj.get("nombre", "")
+                    comuna = comuna_obj.get("nombre", "")
+                    ubicacion = f"{comuna}, {region}".strip(", ") if (comuna or region) else "Chile"
+
+                    # Modalidad / Jornada
+                    jornada = item.get("jornadaLaboral") or {}
+                    modalidad = jornada.get("nombre", "Jornada Completa")
+
+                    # Descripción
+                    descripcion = item.get("descripcion", "").strip()
+
+                    # Si la descripción en el listado es corta, intentar traer el detalle completo
+                    if len(descripcion) < 150:
+                        try:
+                            det_resp = requests.get(
+                                f"https://www.bne.cl/api/ofertas/publica/{id_oferta}",
+                                headers=headers,
+                                timeout=8,
+                            )
+                            if det_resp.status_code == 200:
+                                det_data = det_resp.json()
+                                descripcion = det_data.get("descripcion", descripcion).strip()
+                        except Exception:
+                            pass
+
+                    fecha_pub = str(item.get("fechaPublicacion", ""))
+
+                    # Generar hash único
+                    job_hash = generar_job_hash(
+                        url=url_oferta,
+                        titulo=titulo,
+                        empresa=empresa,
+                        portal="bne",
+                    )
+
+                    # Deduplicación previa (ahorro de tokens)
+                    if oferta_ya_existe(job_hash):
+                        stats["duplicadas"] += 1
+                        continue
+
+                    if not descripcion:
+                        descripcion = f"{titulo} en {empresa}, {ubicacion}."
+
+                    oferta = {
+                        "job_hash": job_hash,
+                        "portal": "bne",
+                        "titulo": titulo,
+                        "empresa": empresa,
+                        "ubicacion": ubicacion,
+                        "modalidad": modalidad,
+                        "url": url_oferta,
+                        "descripcion_cruda": descripcion,
+                        "fecha_publicacion": fecha_pub,
+                    }
+
+                    if callback_progreso:
+                        callback_progreso(f"🤖 Evaluando (BNE): {titulo}")
+
+                    evaluacion = evaluar_oferta_con_gemini(oferta, texto_cv)
+                    guardar_oferta_evaluada(oferta, evaluacion)
+                    stats["nuevas"] += 1
+
+                except Exception as e:
+                    stats["errores"] += 1
+                    stats["detalle_errores"].append(f"Error procesando oferta BNE {id_oferta}: {e}")
+
+        except Exception as e:
+            stats["errores"] += 1
+            stats["detalle_errores"].append(f"Error buscando '{cargo}' en BNE: {e}")
 
     return stats

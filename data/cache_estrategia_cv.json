@@ -5,6 +5,14 @@
   "actualizado": "2026-07-18T01:57:28.243870+00:00",
   "resumen_ejecutivo_detectado": "Profesional polifacético con más de 12 años de experiencia combinando ingeniería minera, gestión ágil y analítica de datos. Experto en Business Analysis, Scrum Mastery e implementación de soluciones de IA generativa, con un historial probado en el sector financiero y operativo, destacando por su capacidad de integrar necesidades de negocio con desarrollos tecnológicos.",
   "cargos_objetivo_busqueda": [
+    "Business Analyst Minería",
+    "Ingeniero Transformación Digital Minería",
+    "Analista Funcional Minería",
+    "Project Manager TI Minería",
+    "Consultor Transformación Digital Mining",
+    "Especialista TI Minería",
+    "Coordinador Proyectos Tecnológicos Minería",
+    "Ingeniero de Datos Minería",
     "Business Analyst",
     "Product Owner",
     "Scrum Master",
@@ -17,6 +25,15 @@
     "Analista de Inteligencia de Negocios"
   ],
   "keywords_tecnicas": [
+    "Minería",
+    "Mining",
+    "Transformación Digital Minera",
+    "Faena",
+    "Planta",
+    "MoC",
+    "TTO",
+    "Sistema de Control",
+    "OT",
     "Scrum",
     "Kanban",
     "Business Analysis",
@@ -39,7 +56,10 @@
     "KPIs",
     "Ethical Hacking Coordination",
     "MVP Definition",
-    "APIs REST"
+    "APIs REST",
+    "SAP PM",
+    "PI System",
+    "OSIsoft"
   ],
   "lineas_rojas_detectadas": [
     "Nivel de inglés: A2 (básico, limitado a lectura técnica)",
