@@ -10,7 +10,25 @@ import re
 import traceback
 import urllib.parse
 import requests
-from bs4 import BeautifulSoup
+
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
+
+
+def _limpiar_html(texto_html: str) -> str:
+    """Limpia HTML usando BeautifulSoup si está disponible, o regex como fallback."""
+    if not texto_html:
+        return ""
+    if BeautifulSoup:
+        try:
+            return BeautifulSoup(texto_html, "html.parser").get_text(separator="\n").strip()
+        except Exception:
+            pass
+    # Fallback con regex
+    sin_tags = re.sub(r"<[^>]+>", " ", texto_html)
+    return html.unescape(sin_tags).strip()
 
 from src.database import generar_job_hash, oferta_ya_existe, guardar_oferta_evaluada
 from src.evaluador_ia import evaluar_oferta_con_gemini
@@ -85,8 +103,7 @@ def ejecutar_busqueda_getonbrd(
 
                     # Limpiar descripción (viene en HTML)
                     desc_html = attrs.get("description", "") + " " + attrs.get("functions", "")
-                    soup = BeautifulSoup(desc_html, "html.parser")
-                    descripcion_limpia = soup.get_text(separator="\n").strip()
+                    descripcion_limpia = _limpiar_html(desc_html)
 
                     # Modalidad y ubicación
                     modalidad = attrs.get("remote_modality", "")
@@ -201,6 +218,11 @@ def ejecutar_busqueda_chiletrabajos(
 
             if resp.status_code != 200:
                 stats["errores"] += 1
+                continue
+
+            if BeautifulSoup is None:
+                stats["errores"] += 1
+                stats["detalle_errores"].append("BeautifulSoup no instalado para scraping de ChileTrabajos")
                 continue
 
             soup = BeautifulSoup(resp.text, "html.parser")
