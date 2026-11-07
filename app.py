@@ -203,26 +203,77 @@ def cargar_cv():
 
 
 def es_oferta_mineria(oferta: dict) -> bool:
-    """Detecta si una oferta pertenece al sector minero o afines."""
-    terminos_mineria = [
-        "minería", "mineria", "minero", "minera", "mining", "faena", "rajo",
-        "subterránea", "subterranea", "concentradora", "lixiviación", "lixiviacion",
-        "fundición", "fundicion", "relave", "flotación", "flotacion", "chancado",
-        "codelco", "bhp", "antofagasta minerals", "sqm", "anglo american", "teck",
-        "collahuasi", "escondida", "pelambres", "centinela", "candelaria", "freeport",
-        "albemarle", "cyd ingeniería", "cyd ingenieria", "cyd", "turner & townsend",
-        "vmica", "ausenco", "bechtel", "hatch", "worley", "wood", "flsmidth",
-        "metso", "komatsu", "finning", "liebherr", "veridapt"
+    """Detecta si una oferta pertenece al sector minero o afines.
+
+    Estrategia por niveles para evitar falsos positivos:
+    - Nivel 1 (título + empresa): términos amplios con word-boundary regex
+    - Nivel 2 (descripción cruda): solo términos altamente específicos de minería
+    - EXCLUYE: enfoque_cv_sugerido (sesgado por CV del usuario)
+    """
+    import re
+
+    titulo = str(oferta.get("titulo", "")).lower()
+    empresa = str(oferta.get("empresa", "")).lower()
+    rol = str(oferta.get("rol_detectado", "")).lower()
+    descripcion = str(oferta.get("descripcion_cruda", "")).lower()[:800]
+
+    # --- Nivel 1: Título + Empresa + Rol (alta confianza) ---
+    texto_nivel1 = f"{titulo} {empresa} {rol}"
+
+    # Términos generales de minería (con word-boundary para evitar falsos positivos)
+    terminos_generales_wb = [
+        r"\bminería\b", r"\bmineria\b", r"\bminero\b", r"\bminera\b",
+        r"\bmining\b", r"\bfaena\b", r"\brajo\b", r"\bmina\b",
     ]
-    campos = [
-        oferta.get("titulo", ""),
-        oferta.get("rol_detectado", ""),
-        oferta.get("empresa", ""),
-        oferta.get("enfoque_cv_sugerido", ""),
-        oferta.get("descripcion_cruda", "")[:1200],
+
+    # Empresas mineras conocidas (match exacto en empresa, sin word-boundary)
+    empresas_mineras = [
+        "codelco", "bhp", "antofagasta minerals", "sqm", "anglo american",
+        "teck", "collahuasi", "escondida", "pelambres", "centinela",
+        "candelaria", "freeport", "albemarle", "vmica", "ausenco",
+        "bechtel", "flsmidth", "metso", "komatsu", "finning", "liebherr",
+        "veridapt", "cyd ingeniería", "cyd ingenieria",
+        "turner & townsend", "turner and townsend",
     ]
-    texto = " ".join(str(c).lower() for c in campos)
-    return any(t in texto for t in terminos_mineria)
+
+    # Empresas ambiguas: solo matchear si aparecen en el campo "empresa"
+    empresas_ambiguas = ["hatch", "wood", "worley", "cyd"]
+
+    # Check nivel 1: términos generales con word-boundary en título+empresa+rol
+    for patron in terminos_generales_wb:
+        if re.search(patron, texto_nivel1):
+            return True
+
+    # Check nivel 1: empresas mineras conocidas en empresa
+    for emp in empresas_mineras:
+        if emp in empresa:
+            return True
+
+    # Check nivel 1: empresas ambiguas SOLO en campo empresa (no en descripción)
+    for emp in empresas_ambiguas:
+        if re.search(rf"\b{re.escape(emp)}\b", empresa):
+            return True
+
+    # --- Nivel 2: Descripción (baja confianza, solo términos muy específicos) ---
+    terminos_especificos = [
+        r"\bconcentradora\b", r"\blixiviación\b", r"\blixiviacion\b",
+        r"\bfundición\b", r"\bfundicion\b", r"\brelave[s]?\b",
+        r"\bflotación\b", r"\bflotacion\b", r"\bchancado\b",
+        r"\bsubterránea\b", r"\bsubterranea\b", r"\brajo\b",
+        r"\bcodelco\b", r"\bbhp\b", r"\bsqm\b", r"\bescondida\b",
+        r"\bcollahuasi\b", r"\bpelambres\b", r"\bantofagasta minerals\b",
+        r"\bgeología\b", r"\bgeologia\b", r"\bmetalurgia\b",
+        r"\bhidrometalurgia\b", r"\bpirometalurgia\b",
+        r"\bplanta minera\b", r"\bsector minero\b",
+        r"\bindustria minera\b", r"\boperación minera\b",
+        r"\boperacion minera\b", r"\bproyecto minero\b",
+    ]
+
+    for patron in terminos_especificos:
+        if re.search(patron, descripcion):
+            return True
+
+    return False
 
 
 def render_kpi_card(label: str, value, css_class: str = "kpi-white"):
