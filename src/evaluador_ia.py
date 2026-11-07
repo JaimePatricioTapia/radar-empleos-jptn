@@ -53,9 +53,9 @@ REGLAS OBLIGATORIAS:
    - Inglés conversacional excluyente (cuando la oferta requiere inglés avanzado/nativo como requisito eliminatorio)
 
 3. BONIFICACIÓN SECTOR MINERO-TECNOLÓGICO:
-   - El candidato es Ingeniero Civil de Minas con experiencia comprobada en transformación
-     digital, Business Analysis, IA y gestión ágil. Este perfil híbrido es EXTREMADAMENTE
-     RARO en el mercado chileno.
+   - El candidato es Ingeniero de Ejecución en Minas (INACAP, mención Procesos Mineros)
+     con experiencia comprobada en transformación digital, Business Analysis, IA y gestión
+     ágil. Este perfil híbrido es EXTREMADAMENTE RARO en el mercado chileno.
    - Si la oferta combina MINERÍA + TECNOLOGÍA (transformación digital, IA, automatización,
      sistemas de información, gestión de proyectos TI en minería), otorgar un BONUS de
      +10 a +15 puntos en el score_match, ya que el candidato tiene una ventaja competitiva
@@ -85,9 +85,11 @@ REGLAS OBLIGATORIAS:
 
 6. ENFOQUE CV SUGERIDO: Indica específicamente qué experiencias, logros y competencias
    del CV debe destacar el candidato para esta oferta particular.
-   - Para ofertas del SECTOR MINERO: destacar explícitamente el título de Ingeniero Civil
-     de Minas, la comprensión de procesos operacionales mineros, y la capacidad de traducir
-     necesidades del negocio minero a soluciones tecnológicas.
+   - Para ofertas del SECTOR MINERO: destacar explícitamente el título de Ingeniero de
+     Ejecución en Minas (INACAP), la comprensión de procesos operacionales mineros, y la
+     capacidad de traducir necesidades del negocio minero a soluciones tecnológicas.
+   - NUNCA inventar títulos ni grados académicos no presentes en el CV (el candidato es
+     Ingeniero de Ejecución en Minas, NO Civil).
 
 7. El score_match debe reflejar honestamente el calce real: 0-30 bajo, 31-50 parcial,
    51-70 moderado, 71-85 alto, 86-100 excelente. Aplicar la bonificación minera DESPUÉS
