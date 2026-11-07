@@ -167,7 +167,10 @@ from src.database import (
     obtener_metricas_resumen,
     obtener_ofertas_filtradas,
     actualizar_estado_oferta,
+    generar_job_hash,
+    guardar_oferta_evaluada,
 )
+from src.evaluador_ia import evaluar_oferta_con_gemini
 from src.ingesta_jobspy import ejecutar_busqueda_jobspy
 from src.ingesta_portales import (
     ejecutar_busqueda_getonbrd,
@@ -543,6 +546,70 @@ with kcol3:
     render_kpi_card("Postulados", metricas["postulados"], "kpi-blue")
 with kcol4:
     render_kpi_card("Por Revisar", metricas["por_revisar"], "kpi-orange")
+
+st.divider()
+
+# ----- 2.1 Ingesta Rápida / Evaluar Oferta Manual -----
+with st.expander("📥 Evaluar Oferta Directa (Pegar URL o Texto de LinkedIn / Portal)", expanded=False):
+    st.markdown(
+        "¿Encontraste una oferta en LinkedIn, WhatsApp u otro portal? Pega los datos aquí "
+        "para que Gemini la evalúe semánticamente contra tu CV completo y la guarde en tu radar."
+    )
+    col_in1, col_in2 = st.columns(2)
+    with col_in1:
+        manual_titulo = st.text_input("Título del Cargo*", placeholder="Ej: Senior Business Analyst")
+        manual_empresa = st.text_input("Empresa*", placeholder="Ej: BHP")
+        manual_portal = st.selectbox("Portal de origen", ["linkedin", "indeed", "bne", "chiletrabajos", "getonbrd", "laborum", "trabajando", "otro"], index=0)
+    with col_in2:
+        manual_url = st.text_input("URL de la oferta (opcional)", placeholder="https://www.linkedin.com/jobs/view/...")
+        manual_ubicacion = st.text_input("Ubicación", value="Santiago / Antofagasta, Chile", placeholder="Ej: Santiago, Antofagasta, Remoto")
+        manual_modalidad = st.selectbox("Modalidad", ["Híbrido", "Remoto", "Presencial"], index=0)
+
+    manual_descripcion = st.text_area(
+        "Descripción o Requisitos de la Oferta*",
+        placeholder="Pega aquí el texto de la oferta (responsabilidades, requisitos, acerca del empleo)...",
+        height=150,
+    )
+
+    if st.button("🤖 Evaluar y Agregar al Radar con IA", key="btn_evaluar_manual", type="primary"):
+        if not manual_titulo.strip() or not manual_empresa.strip() or not manual_descripcion.strip():
+            st.warning("⚠️ Debes ingresar al menos el Título, Empresa y la Descripción de la oferta.")
+        else:
+            with st.spinner("🤖 Comparando oferta contra tu CV íntegro con Gemini..."):
+                try:
+                    cv_data = leer_cv_pdf_integro()
+                    texto_cv = cv_data["texto"]
+
+                    url_para_hash = manual_url.strip() if manual_url.strip() else f"manual_{manual_titulo}_{manual_empresa}"
+                    job_hash = generar_job_hash(
+                        url=url_para_hash,
+                        titulo=manual_titulo.strip(),
+                        empresa=manual_empresa.strip(),
+                        portal=manual_portal,
+                    )
+
+                    oferta_manual = {
+                        "job_hash": job_hash,
+                        "portal": manual_portal,
+                        "titulo": manual_titulo.strip(),
+                        "empresa": manual_empresa.strip(),
+                        "ubicacion": manual_ubicacion.strip(),
+                        "modalidad": manual_modalidad,
+                        "url": manual_url.strip(),
+                        "descripcion_cruda": manual_descripcion.strip(),
+                        "fecha_publicacion": "",
+                    }
+
+                    evaluacion = evaluar_oferta_con_gemini(oferta_manual, texto_cv)
+                    guardar_oferta_evaluada(oferta_manual, evaluacion)
+
+                    st.success(
+                        f"🎉 ¡Oferta evaluada con éxito! Calce: {evaluacion.get('score_match', 0)}% "
+                        f"({evaluacion.get('veredicto', '')}). Ya está en tu biblioteca."
+                    )
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al evaluar la oferta: {e}")
 
 st.divider()
 

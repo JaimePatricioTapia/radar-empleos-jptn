@@ -48,14 +48,11 @@ def ejecutar_busqueda_jobspy(
     if portales is None:
         portales = ["linkedin", "indeed", "google"]
 
-    # Ubicaciones expandidas: regiones mineras prioritarias + generales
+    # Ubicaciones optimizadas: "Chile" cubre todo el país (incluye Santiago y remoto)
+    # y "Antofagasta, Chile" refuerza el corazón minero sin saturar de peticiones
     ubicaciones = [
-        "Antofagasta, Chile",
-        "Calama, Chile",
-        "Copiapó, Chile",
-        "Atacama, Chile",
-        "Santiago, Chile",
         "Chile",
+        "Antofagasta, Chile",
     ]
 
     stats = {
