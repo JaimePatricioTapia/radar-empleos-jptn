@@ -156,6 +156,19 @@ Evalúa esta oferta contra el CV del candidato siguiendo las reglas establecidas
 
     client = genai.Client(api_key=api_key)
 
+    # Incorporar reglas aprendidas dinámicamente si están activas
+    system_instruction_dinamico = SYSTEM_PROMPT
+    try:
+        from src.calibrador_aprendizaje import obtener_directrices_para_evaluador
+        directrices = obtener_directrices_para_evaluador()
+        if directrices:
+            reglas_aprendizaje = "\n\n8. REGLAS DE PREFERENCIA APRENDIDAS DEL CANDIDATO (Basadas en su historial real de postulaciones y descartes):\n"
+            for d in directrices:
+                reglas_aprendizaje += f"   - {d}\n"
+            system_instruction_dinamico = SYSTEM_PROMPT + reglas_aprendizaje
+    except Exception:
+        pass
+
     # Modelos con alta disponibilidad y cuota generosa
     modelos = [
         "gemini-3.1-flash-lite",
@@ -171,7 +184,7 @@ Evalúa esta oferta contra el CV del candidato siguiendo las reglas establecidas
                 model=m,
                 contents=user_prompt,
                 config={
-                    "system_instruction": SYSTEM_PROMPT,
+                    "system_instruction": system_instruction_dinamico,
                     "response_mime_type": "application/json",
                     "response_schema": EvaluacionOferta,
                 },

@@ -1,0 +1,64 @@
+{
+  "actualizado_el": "2026-11-07T22:19:08.178315+00:00",
+  "total_postuladas_analizadas": 32,
+  "total_descartadas_analizadas": 50,
+  "activo": true,
+  "resumen_habitos_postulacion": "El candidato se especializa en roles de 'Product Ownership', 'Business Analysis' y 'Gestión de Transformación Digital' con un enfoque marcado en la articulación entre negocio y tecnología. Rechaza consistentemente roles de ingeniería operativa, soporte técnico en terreno, minería pura y funciones de analítica técnica (Data/BI) que impliquen una carga alta de ejecución técnica en lugar de estratégica.",
+  "criterios_favoritos": [
+    "Product Ownership (PO)",
+    "Business Analysis (BA)",
+    "Transformación Digital",
+    "Metodologías Ágiles",
+    "Gestión de Proyectos TI",
+    "Sector Banca y Retail",
+    "E-commerce y Digital"
+  ],
+  "criterios_descarte": [
+    "Operaciones Mineras (terreno, planta, mantenimiento)",
+    "Ingeniería de Datos o Analítica técnica pura (Data Engineer/BI Analyst)",
+    "Roles de Soporte técnico básico (Soporte TI, Key User, Administrador de contratos)",
+    "Ingeniería de procesos industriales no ligados a TI",
+    "Auditoría interna y gestión de riesgos técnicos",
+    "Consultoría de outsourcing genérico con enfoque en soporte"
+  ],
+  "keywords_clave_postuladas": [
+    "Product Owner",
+    "Business Analyst",
+    "Transformación Digital",
+    "Agile",
+    "E-commerce",
+    "Innovación",
+    "Gestión de Proyectos",
+    "Mobile",
+    "Banca"
+  ],
+  "keywords_asociadas_descarte": [
+    "Minería",
+    "Faena",
+    "Mantenimiento",
+    "Soporte técnico",
+    "Key User",
+    "Data Engineer",
+    "SQL",
+    "Repuestos",
+    "Auditoría",
+    "Operaciones"
+  ],
+  "nuevos_cargos_recomendados_busqueda": [
+    "IT Product Manager",
+    "Digital Business Analyst",
+    "Product Owner - Canales Digitales",
+    "Gerente de Proyectos de Transformación TI",
+    "Analista de Negocios Senior - Soluciones Digitales",
+    "Agile Project Lead",
+    "E-commerce Product Manager"
+  ],
+  "directrices_calibracion_evaluador": [
+    "Penalizar drásticamente ofertas que contengan palabras relacionadas con minería, faenas o mantenimiento industrial.",
+    "Filtrar y descartar automáticamente ofertas cuyo core sea 'Soporte TI', 'Soporte técnico' o 'Key User' de sistemas ERP tradicionales.",
+    "Priorizar ofertas donde el título o descripción incluya metodologías (Agile, Scrum) y términos de negocio digital (Product, Digital, E-commerce).",
+    "Restar relevancia a posiciones que se enfoquen únicamente en 'Ingeniería de Datos', 'Data Analyst' o 'BI' si no tienen un componente de gestión de producto o negocio.",
+    "Asignar un score positivo alto (85-100) solo si la oferta combina la visión de negocio con el ciclo de vida de un producto digital.",
+    "No recomendar ofertas de consultoría que parezcan ser de outsourcing de personal técnico/soporte sin un componente estratégico."
+  ]
+}

@@ -188,11 +188,60 @@ if "estrategia" not in st.session_state:
     st.session_state.estrategia = None
 if "busqueda_activa" not in st.session_state:
     st.session_state.busqueda_activa = False
+if "undo_accion" not in st.session_state:
+    st.session_state.undo_accion = None
+if "pagina_actual" not in st.session_state:
+    st.session_state.pagina_actual = 1
 
 
 # ---------------------------------------------------------------------------
-# Funciones auxiliares
+# Funciones auxiliares y Caché de Alto Rendimiento
 # ---------------------------------------------------------------------------
+
+@st.cache_data(ttl=25, show_spinner=False)
+def _cargar_metricas_cache():
+    return obtener_metricas_resumen()
+
+
+@st.cache_data(ttl=25, show_spinner=False)
+def _cargar_ofertas_cache(veredictos_tuple, score_minimo, estados_tuple, portales_tuple):
+    veredictos = list(veredictos_tuple) if veredictos_tuple else None
+    estados = list(estados_tuple) if estados_tuple else None
+    portales = list(portales_tuple) if portales_tuple else None
+    return obtener_ofertas_filtradas(
+        veredictos=veredictos,
+        score_minimo=score_minimo,
+        estados=estados,
+        portales=portales,
+    )
+
+
+def ejecutar_cambio_estado(oferta: dict, nuevo_estado: str):
+    """Actualiza el estado de una oferta en Supabase, guarda la acción previa
+    para deshacer en 1 clic y limpia la caché para una respuesta visual instantánea."""
+    oferta_id = oferta.get("id")
+    estado_previo = oferta.get("estado_postulacion", "NUEVA")
+    if nuevo_estado == estado_previo:
+        return
+
+    try:
+        actualizar_estado_oferta(oferta_id, nuevo_estado)
+        # Registrar para deshacer inmediatamente
+        st.session_state["undo_accion"] = {
+            "id": oferta_id,
+            "titulo": oferta.get("titulo", "Sin título"),
+            "empresa": oferta.get("empresa", "Empresa no especificada"),
+            "estado_anterior": estado_previo,
+            "nuevo_estado": nuevo_estado,
+        }
+        # Invalidar caché local para reflejar el cambio en milisegundos
+        _cargar_ofertas_cache.clear()
+        _cargar_metricas_cache.clear()
+        st.toast(f"✅ Oferta marcada como: {nuevo_estado}")
+        st.rerun()
+    except Exception as e:
+        st.error(f"❌ Error al actualizar estado: {e}")
+
 
 def cargar_cv():
     """Carga el CV y la estrategia de búsqueda."""
@@ -434,7 +483,19 @@ with st.sidebar:
     # Cargos Objetivo (Selector ergonómico)
     cargos_disponibles = []
     if st.session_state.estrategia:
-        cargos_disponibles = st.session_state.estrategia.get("cargos_objetivo_busqueda", [])
+        cargos_disponibles = list(st.session_state.estrategia.get("cargos_objetivo_busqueda", []))
+
+    # Incorporar cargos aprendidos desde el perfil de calibración si existen
+    from src.calibrador_aprendizaje import (
+        obtener_perfil_aprendizaje_cache,
+        ejecutar_analisis_aprendizaje,
+        cambiar_estado_activacion_aprendizaje,
+    )
+    perfil_aprendido = obtener_perfil_aprendizaje_cache()
+    if perfil_aprendido and perfil_aprendido.get("nuevos_cargos_recomendados_busqueda"):
+        for nc in perfil_aprendido["nuevos_cargos_recomendados_busqueda"]:
+            if nc not in cargos_disponibles:
+                cargos_disponibles.append(nc)
 
     st.markdown("#### 🎯 Cargos Objetivo")
     cargos_seleccionados = st.multiselect(
@@ -528,24 +589,26 @@ st.markdown(
 
 # ----- 2. Métricas KPI Siempre Visibles (Embudo de Conversión) -----
 try:
-    metricas = obtener_metricas_resumen()
+    metricas = _cargar_metricas_cache()
 except Exception:
     metricas = {
         "ofertas_totales": 0,
         "recomendadas_postular": 0,
         "postulados": 0,
+        "descartadas": 0,
+        "guardadas": 0,
         "por_revisar": 0,
     }
 
 kcol1, kcol2, kcol3, kcol4 = st.columns(4)
 with kcol1:
-    render_kpi_card("Ofertas Totales", metricas["ofertas_totales"], "kpi-white")
+    render_kpi_card("Ofertas Totales", metricas.get("ofertas_totales", 0), "kpi-white")
 with kcol2:
-    render_kpi_card("Recomendadas (Postular)", metricas["recomendadas_postular"], "kpi-green")
+    render_kpi_card("Recomendadas (Postular)", metricas.get("recomendadas_postular", 0), "kpi-green")
 with kcol3:
-    render_kpi_card("Postulados", metricas["postulados"], "kpi-blue")
+    render_kpi_card("Postulados", metricas.get("postulados", 0), "kpi-blue")
 with kcol4:
-    render_kpi_card("Por Revisar", metricas["por_revisar"], "kpi-orange")
+    render_kpi_card("Por Revisar", metricas.get("por_revisar", 0), "kpi-orange")
 
 st.divider()
 
@@ -607,9 +670,79 @@ with st.expander("📥 Evaluar Oferta Directa (Pegar URL o Texto de LinkedIn / P
                         f"🎉 ¡Oferta evaluada con éxito! Calce: {evaluacion.get('score_match', 0)}% "
                         f"({evaluacion.get('veredicto', '')}). Ya está en tu biblioteca."
                     )
+                    _cargar_ofertas_cache.clear()
+                    _cargar_metricas_cache.clear()
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error al evaluar la oferta: {e}")
+
+# ----- 2.2 Aprendizaje del Radar y Calibración Inteligente -----
+with st.expander("🧠 Aprendizaje del Radar (Patrones de tus Postulaciones y Calibración)", expanded=False):
+    perfil_apr = obtener_perfil_aprendizaje_cache()
+
+    st.markdown(
+        "El sistema analiza tus decisiones históricas (**POSTULADO** vs **DESCARTADA**) "
+        "para descubrir tus verdaderas preferencias y calibrar automáticamente tanto las directrices de Gemini "
+        "como los cargos sugeridos para búsqueda, sin necesidad de modelos pesados de Deep Learning."
+    )
+
+    col_ap1, col_ap2, col_ap3 = st.columns([1.5, 1.5, 2])
+    with col_ap1:
+        st.metric("Postuladas analizadas", perfil_apr.get("total_postuladas_analizadas", 0) if perfil_apr else 0)
+    with col_ap2:
+        st.metric("Descartadas analizadas", perfil_apr.get("total_descartadas_analizadas", 0) if perfil_apr else 0)
+    with col_ap3:
+        estado_activo = perfil_apr.get("activo", True) if perfil_apr else True
+        toggle_calib = st.toggle(
+            "Aplicar reglas aprendidas al evaluar",
+            value=estado_activo,
+            help="Si está activo, Gemini inyecta estas directrices al evaluar nuevas ofertas para premiar lo que te gusta y penalizar lo que sueles descartar.",
+        )
+        if perfil_apr and toggle_calib != estado_activo:
+            cambiar_estado_activacion_aprendizaje(toggle_calib)
+            st.toast("✅ Configuración de calibración actualizada")
+            st.rerun()
+
+    if st.button("🔄 Ejecutar Calibración / Re-analizar mis patrones con IA", type="primary", use_container_width=True):
+        with st.spinner("🤖 Analizando ofertas postuladas vs descartadas con Gemini..."):
+            try:
+                perfil_apr = ejecutar_analisis_aprendizaje(forzar=True)
+                st.success("🎉 ¡Calibración completada con éxito!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error al calibrar: {e}")
+
+    if perfil_apr:
+        st.markdown("---")
+        st.markdown("**💡 Diagnóstico de tus Hábitos y Preferencias Reales:**")
+        st.info(perfil_apr.get("resumen_habitos_postulacion", ""))
+
+        c_fav, c_desc = st.columns(2)
+        with c_fav:
+            st.markdown("#### 🎯 Criterios y Factores Favoritos")
+            for crit in perfil_apr.get("criterios_favoritos", []):
+                st.markdown(f"- ✅ **{crit}**")
+            kw_pos = perfil_apr.get("keywords_clave_postuladas", [])
+            if kw_pos:
+                st.markdown("**Keywords clave postuladas:**")
+                st.markdown(" ".join([f"`{k}`" for k in kw_pos]))
+
+        with c_desc:
+            st.markdown("#### 🛑 Factores de Descarte")
+            for crit in perfil_apr.get("criterios_descarte", []):
+                st.markdown(f"- ❌ {crit}")
+            kw_desc = perfil_apr.get("keywords_asociadas_descarte", [])
+            if kw_desc:
+                st.markdown("**Keywords asociadas a descarte:**")
+                st.markdown(" ".join([f"`{k}`" for k in kw_desc]))
+
+        st.markdown("#### 📋 Directrices Inyectadas al Evaluador:")
+        for idx_d, d in enumerate(perfil_apr.get("directrices_calibracion_evaluador", []), 1):
+            st.markdown(f"**{idx_d}.** {d}")
+
+        if perfil_apr.get("nuevos_cargos_recomendados_busqueda"):
+            st.markdown("#### 🔎 Nuevos Cargos Sugeridos para Portales:")
+            st.markdown(" ".join([f"`{c}`" for c in perfil_apr["nuevos_cargos_recomendados_busqueda"]]))
 
 st.divider()
 
@@ -700,18 +833,68 @@ if st.session_state.busqueda_activa:
 
     banner_holder.empty()
     status_ticker.empty()
+    _cargar_ofertas_cache.clear()
+    _cargar_metricas_cache.clear()
     st.toast(f"🎉 Barrido completado: {total_nuevas} nuevas ofertas evaluadas ({total_duplicadas} duplicadas)")
     st.rerun()
 
 # ----- 4. Listado de Ofertas Laborales -----
-st.markdown("### 📋 Ofertas Laborales Evaluadas")
+st.markdown("### 📋 Ofertas Laborales")
+
+# 4.1 Banner de Deshacer (Undo) si hubo una acción reciente
+if st.session_state.get("undo_accion"):
+    undo = st.session_state["undo_accion"]
+    u_col1, u_col2 = st.columns([3.6, 1.4])
+    with u_col1:
+        st.warning(
+            f"⚠️ Oferta marcada como **{undo['nuevo_estado']}**: *{undo['titulo']}* ({undo['empresa']})"
+        )
+    with u_col2:
+        if st.button(
+            f"↩️ Deshacer ({undo['estado_anterior']})",
+            key="btn_undo_global",
+            type="primary",
+            use_container_width=True,
+            help="Restaura inmediatamente esta oferta a su estado anterior",
+        ):
+            actualizar_estado_oferta(undo["id"], undo["estado_anterior"])
+            estado_restaurado = undo["estado_anterior"]
+            st.session_state["undo_accion"] = None
+            _cargar_ofertas_cache.clear()
+            _cargar_metricas_cache.clear()
+            st.toast(f"✅ Oferta restaurada a {estado_restaurado}")
+            st.rerun()
+
+# 4.2 Selector de Vista Rápida por Estado (1 clic)
+vista_seleccionada = st.segmented_control(
+    "Filtrar por estado:",
+    options=["🔥 Por Revisar", "📮 Postuladas", "🗑️ Descartadas", "⭐ Guardadas", "🌐 Todas"],
+    default="🔥 Por Revisar",
+    label_visibility="collapsed",
+)
+
+if "vista_anterior" not in st.session_state or st.session_state.vista_anterior != vista_seleccionada:
+    st.session_state.vista_anterior = vista_seleccionada
+    st.session_state.pagina_actual = 1
+
+# Mapeo de la vista seleccionada a los estados de la base de datos
+if vista_seleccionada == "🔥 Por Revisar":
+    estados_activos = ["NUEVA", "GUARDADA"]
+elif vista_seleccionada == "📮 Postuladas":
+    estados_activos = ["POSTULADO"]
+elif vista_seleccionada == "🗑️ Descartadas":
+    estados_activos = ["DESCARTADA"]
+elif vista_seleccionada == "⭐ Guardadas":
+    estados_activos = ["GUARDADA"]
+else:
+    estados_activos = filtro_estado if filtro_estado else None
 
 try:
-    ofertas = obtener_ofertas_filtradas(
-        veredictos=filtro_veredicto if filtro_veredicto else None,
+    ofertas = _cargar_ofertas_cache(
+        veredictos_tuple=tuple(filtro_veredicto) if filtro_veredicto else None,
         score_minimo=filtro_score,
-        estados=filtro_estado if filtro_estado else None,
-        portales=portales_seleccionados if portales_seleccionados else None,
+        estados_tuple=tuple(estados_activos) if estados_activos else None,
+        portales_tuple=tuple(portales_seleccionados) if portales_seleccionados else None,
     )
 except Exception as e:
     ofertas = []
@@ -746,24 +929,63 @@ if ofertas:
             reverse=True,
         )
 
+    total_ofertas = len(ofertas)
     cant_mineria = sum(1 for o in ofertas if es_oferta_mineria(o))
     detalle_mineria = f"⛏️ {cant_mineria} del sector minero · " if cant_mineria > 0 else ""
     orden_msg = "Minería y afinidad alta primero" if priorizar_mineria else "mayor afinidad primero"
-    st.caption(f"Mostrando **{len(ofertas)}** ofertas ({detalle_mineria}ordenadas por {orden_msg})")
 
-    for oferta in ofertas:
+    # Configuración de paginación (15 ofertas por página para carga instantánea)
+    tamano_pagina = 15
+    total_paginas = max(1, (total_ofertas + tamano_pagina - 1) // tamano_pagina)
+
+    if st.session_state.pagina_actual > total_paginas:
+        st.session_state.pagina_actual = total_paginas
+    if st.session_state.pagina_actual < 1:
+        st.session_state.pagina_actual = 1
+
+    inicio = (st.session_state.pagina_actual - 1) * tamano_pagina
+    fin = min(inicio + tamano_pagina, total_ofertas)
+    ofertas_pagina = ofertas[inicio:fin]
+
+    st.caption(
+        f"Mostrando **{total_ofertas}** ofertas en {vista_seleccionada} "
+        f"({detalle_mineria}ordenadas por {orden_msg})"
+    )
+
+    # Navegación superior de páginas
+    if total_paginas > 1:
+        pcol1, pcol2, pcol3 = st.columns([1, 2, 1])
+        with pcol1:
+            if st.button("⬅️ Anterior", disabled=(st.session_state.pagina_actual <= 1), key="btn_pag_prev_top", use_container_width=True):
+                st.session_state.pagina_actual -= 1
+                st.rerun()
+        with pcol2:
+            st.markdown(
+                f"<div style='text-align: center; color: #94a3b8; padding-top: 6px; font-size: 0.9rem;'>"
+                f"Página <strong>{st.session_state.pagina_actual}</strong> de <strong>{total_paginas}</strong> "
+                f"(Ofertas {inicio + 1}–{fin} de {total_ofertas})"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        with pcol3:
+            if st.button("Siguiente ➡️", disabled=(st.session_state.pagina_actual >= total_paginas), key="btn_pag_next_top", use_container_width=True):
+                st.session_state.pagina_actual += 1
+                st.rerun()
+
+    for oferta in ofertas_pagina:
         url = render_offer_card(oferta)
         oferta_id = oferta.get("id", "")
+        estado_actual = oferta.get("estado_postulacion", "NUEVA")
 
-        # Fila de acciones ergonómica
-        acol1, acol2, acol3 = st.columns([1, 1.2, 1])
+        # Fila de acciones ergonómica y rápida
+        acol1, acol2, acol3, acol4 = st.columns([1, 1.2, 1, 1.2])
 
         with acol1:
             if url:
                 st.link_button("Ver Oferta 🔗", url, use_container_width=True)
 
         with acol2:
-            if st.button("📋 Copiar Ficha para CV", key=f"copy_{oferta_id}", use_container_width=True):
+            if st.button("📋 Copiar Ficha", key=f"copy_{oferta_id}", use_container_width=True):
                 ats_list = oferta.get('keywords_ats', [])
                 if isinstance(ats_list, str):
                     try:
@@ -784,29 +1006,57 @@ if ofertas:
                 st.code(ficha, language="text")
 
         with acol3:
-            estado_actual = oferta.get("estado_postulacion", "NUEVA")
-            estados_opciones = ["NUEVA", "GUARDADA", "POSTULADO", "DESCARTADA"]
-            idx = estados_opciones.index(estado_actual) if estado_actual in estados_opciones else 0
+            # Acción principal de descarte o restauración según el estado
+            if estado_actual == "DESCARTADA":
+                if st.button("↩️ Restaurar", key=f"btn_rest_{oferta_id}", type="primary", use_container_width=True, help="Restaura esta oferta a Por Revisar"):
+                    ejecutar_cambio_estado(oferta, "NUEVA")
+            elif estado_actual == "POSTULADO":
+                if st.button("↩️ Reabrir", key=f"btn_reopen_{oferta_id}", use_container_width=True, help="Regresa la oferta a Por Revisar"):
+                    ejecutar_cambio_estado(oferta, "NUEVA")
+            else:
+                if st.button("🗑️ Descartar", key=f"btn_desc_{oferta_id}", use_container_width=True, help="Descarta la oferta y la saca de la vista actual"):
+                    ejecutar_cambio_estado(oferta, "DESCARTADA")
 
-            nuevo_estado = st.selectbox(
-                "Estado de la postulación",
-                options=estados_opciones,
-                index=idx,
-                key=f"estado_{oferta_id}",
-                label_visibility="collapsed",
-            )
-            if nuevo_estado != estado_actual:
-                try:
-                    actualizar_estado_oferta(oferta_id, nuevo_estado)
-                    st.toast(f"✅ Estado actualizado a: {nuevo_estado}")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
+        with acol4:
+            if estado_actual in ("NUEVA", "GUARDADA"):
+                if st.button("📮 Postulé", key=f"btn_post_{oferta_id}", type="primary", use_container_width=True, help="Marca que postulaste a esta oferta"):
+                    ejecutar_cambio_estado(oferta, "POSTULADO")
+            else:
+                estados_opciones = ["NUEVA", "GUARDADA", "POSTULADO", "DESCARTADA"]
+                idx = estados_opciones.index(estado_actual) if estado_actual in estados_opciones else 0
+                nuevo_st = st.selectbox(
+                    "Estado",
+                    options=estados_opciones,
+                    index=idx,
+                    key=f"sel_st_{oferta_id}",
+                    label_visibility="collapsed",
+                )
+                if nuevo_st != estado_actual:
+                    ejecutar_cambio_estado(oferta, nuevo_st)
 
         st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
+
+    # Navegación inferior de páginas
+    if total_paginas > 1:
+        bcol1, bcol2, bcol3 = st.columns([1, 2, 1])
+        with bcol1:
+            if st.button("⬅️ Anterior", disabled=(st.session_state.pagina_actual <= 1), key="btn_pag_prev_bottom", use_container_width=True):
+                st.session_state.pagina_actual -= 1
+                st.rerun()
+        with bcol2:
+            st.markdown(
+                f"<div style='text-align: center; color: #94a3b8; padding-top: 6px; font-size: 0.9rem;'>"
+                f"Página <strong>{st.session_state.pagina_actual}</strong> de <strong>{total_paginas}</strong>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        with bcol3:
+            if st.button("Siguiente ➡️", disabled=(st.session_state.pagina_actual >= total_paginas), key="btn_pag_next_bottom", use_container_width=True):
+                st.session_state.pagina_actual += 1
+                st.rerun()
 else:
     st.info(
-        "🔍 **No hay ofertas que coincidan con los filtros actuales.**\n\n"
-        "• Ajusta los filtros de veredicto o el score mínimo en la barra lateral.\n"
-        "• O haz clic en **'🔍 Ejecutar Búsqueda en Portales'** para rastrear nuevas oportunidades."
+        f"🔍 **No hay ofertas en la vista '{vista_seleccionada}' que coincidan con los filtros actuales.**\n\n"
+        "• Puedes cambiar de vista ('🔥 Por Revisar', '📮 Postuladas', '🗑️ Descartadas') con las pestañas superiores.\n"
+        "• Ajusta el score mínimo en la barra lateral o ejecuta una nueva búsqueda."
     )

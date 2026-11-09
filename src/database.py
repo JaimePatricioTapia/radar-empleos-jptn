@@ -225,50 +225,39 @@ def obtener_ofertas_filtradas(
 # ---------------------------------------------------------------------------
 
 def obtener_metricas_resumen() -> dict:
-    """Calcula métricas resumen para el dashboard.
+    """Calcula métricas resumen para el dashboard en una sola consulta optimizada.
 
     Returns:
-        dict con:
-        - ofertas_totales: int
-        - recomendadas_postular: int  (veredicto = POSTULAR)
-        - postulados: int             (estado = POSTULADO)
-        - por_revisar: int            (estado NUEVA + veredicto POSTULAR o CON RESERVAS)
+        dict con métricas agregadas.
     """
     client = _get_client()
 
-    # Totales
-    total = client.table("ofertas_laborales").select("id", count="exact").execute()
-
-    # Recomendadas
-    recomendadas = (
+    # Consulta única agregada para máxima velocidad (evita 4 round trips HTTP)
+    res = (
         client.table("ofertas_laborales")
-        .select("id", count="exact")
-        .eq("veredicto", "POSTULAR")
+        .select("id, estado_postulacion, veredicto")
         .execute()
     )
+    data = res.data or []
 
-    # Postulados
-    postulados = (
-        client.table("ofertas_laborales")
-        .select("id", count="exact")
-        .eq("estado_postulacion", "POSTULADO")
-        .execute()
-    )
-
-    # Por revisar: NUEVA + (POSTULAR o POSTULAR CON RESERVAS)
-    por_revisar = (
-        client.table("ofertas_laborales")
-        .select("id", count="exact")
-        .eq("estado_postulacion", "NUEVA")
-        .in_("veredicto", ["POSTULAR", "POSTULAR CON RESERVAS"])
-        .execute()
+    totales = len(data)
+    recomendadas = sum(1 for o in data if o.get("veredicto") == "POSTULAR")
+    postulados = sum(1 for o in data if o.get("estado_postulacion") == "POSTULADO")
+    descartadas = sum(1 for o in data if o.get("estado_postulacion") == "DESCARTADA")
+    guardadas = sum(1 for o in data if o.get("estado_postulacion") == "GUARDADA")
+    por_revisar = sum(
+        1 for o in data
+        if o.get("estado_postulacion") == "NUEVA"
+        and o.get("veredicto") in ("POSTULAR", "POSTULAR CON RESERVAS")
     )
 
     return {
-        "ofertas_totales": total.count or 0,
-        "recomendadas_postular": recomendadas.count or 0,
-        "postulados": postulados.count or 0,
-        "por_revisar": por_revisar.count or 0,
+        "ofertas_totales": totales,
+        "recomendadas_postular": recomendadas,
+        "postulados": postulados,
+        "descartadas": descartadas,
+        "guardadas": guardadas,
+        "por_revisar": por_revisar,
     }
 
 
@@ -302,3 +291,40 @@ def actualizar_estado_oferta(oferta_id: str, nuevo_estado: str) -> bool:
     )
 
     return len(result.data) > 0
+
+
+# ---------------------------------------------------------------------------
+# Extracción de datos para Aprendizaje y Calibración
+# ---------------------------------------------------------------------------
+
+def obtener_ofertas_aprendizaje(limite: int = 50) -> dict:
+    """Recupera ofertas con estado POSTULADO y DESCARTADA para análisis de patrones.
+
+    Args:
+        limite: Número máximo de ofertas por categoría a recuperar.
+
+    Returns:
+        dict con listas 'postuladas' y 'descartadas'.
+    """
+    client = _get_client()
+    postuladas = (
+        client.table("ofertas_laborales")
+        .select("id, titulo, empresa, modalidad, ubicacion, rol_detectado, score_match, keywords_ats, fortalezas, brechas, veredicto")
+        .eq("estado_postulacion", "POSTULADO")
+        .order("fecha_extraccion", desc=True)
+        .limit(limite)
+        .execute()
+    )
+    descartadas = (
+        client.table("ofertas_laborales")
+        .select("id, titulo, empresa, modalidad, ubicacion, rol_detectado, score_match, keywords_ats, fortalezas, brechas, veredicto")
+        .eq("estado_postulacion", "DESCARTADA")
+        .order("fecha_extraccion", desc=True)
+        .limit(limite)
+        .execute()
+    )
+    return {
+        "postuladas": postuladas.data or [],
+        "descartadas": descartadas.data or [],
+    }
+
