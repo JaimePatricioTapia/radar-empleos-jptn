@@ -167,6 +167,7 @@ from src.database import (
     obtener_metricas_resumen,
     obtener_ofertas_filtradas,
     actualizar_estado_oferta,
+    obtener_estado_efectivo,
     generar_job_hash,
     guardar_oferta_evaluada,
 )
@@ -411,10 +412,15 @@ def render_offer_card(oferta: dict):
         if es_oferta_mineria(oferta) else ""
     )
 
+    caducada_badge = (
+        '<span class="badge" style="background:#581c87; color:#f3e8ff; border:1px solid #a855f7; font-size:0.75rem; vertical-align:middle; margin-right:6px;">⚠️ CADUCADA / ERROR</span>'
+        if obtener_estado_efectivo(oferta) == "CADUCADA" else ""
+    )
+
     card_html = (
         f'<div class="offer-card {card_class}">'
         f'<div class="offer-header">'
-        f'<div><div class="offer-title">{mineria_badge}{titulo}</div><div class="offer-meta">{meta_str}</div></div>'
+        f'<div><div class="offer-title">{mineria_badge}{caducada_badge}{titulo}</div><div class="offer-meta">{meta_str}</div></div>'
         f'<div class="offer-score {score_class}">{score}%</div>'
         f'</div>'
         f'<div class="offer-salary">'
@@ -868,7 +874,7 @@ if st.session_state.get("undo_accion"):
 # 4.2 Selector de Vista Rápida por Estado (1 clic)
 vista_seleccionada = st.segmented_control(
     "Filtrar por estado:",
-    options=["🔥 Por Revisar", "📮 Postuladas", "🗑️ Descartadas", "⭐ Guardadas", "🌐 Todas"],
+    options=["🔥 Por Revisar", "📮 Postuladas", "🗑️ Descartadas", "⚠️ Caducadas / Error", "⭐ Guardadas", "🌐 Todas"],
     default="🔥 Por Revisar",
     label_visibility="collapsed",
 )
@@ -884,21 +890,37 @@ elif vista_seleccionada == "📮 Postuladas":
     estados_activos = ["POSTULADO"]
 elif vista_seleccionada == "🗑️ Descartadas":
     estados_activos = ["DESCARTADA"]
+elif vista_seleccionada == "⚠️ Caducadas / Error":
+    estados_activos = ["CADUCADA", "DESCARTADA"]
 elif vista_seleccionada == "⭐ Guardadas":
     estados_activos = ["GUARDADA"]
 else:
     estados_activos = filtro_estado if filtro_estado else None
 
 try:
-    ofertas = _cargar_ofertas_cache(
+    ofertas_raw = _cargar_ofertas_cache(
         veredictos_tuple=tuple(filtro_veredicto) if filtro_veredicto else None,
         score_minimo=filtro_score,
         estados_tuple=tuple(estados_activos) if estados_activos else None,
         portales_tuple=tuple(portales_seleccionados) if portales_seleccionados else None,
     )
 except Exception as e:
-    ofertas = []
+    ofertas_raw = []
     st.warning(f"⚠️ Error cargando ofertas: {e}")
+
+# Filtrado estricto por estado efectivo (separa Descartadas reales de Caducadas/Error)
+if vista_seleccionada == "🔥 Por Revisar":
+    ofertas = [o for o in ofertas_raw if obtener_estado_efectivo(o) in ("NUEVA", "GUARDADA")]
+elif vista_seleccionada == "📮 Postuladas":
+    ofertas = [o for o in ofertas_raw if obtener_estado_efectivo(o) == "POSTULADO"]
+elif vista_seleccionada == "🗑️ Descartadas":
+    ofertas = [o for o in ofertas_raw if obtener_estado_efectivo(o) == "DESCARTADA"]
+elif vista_seleccionada == "⚠️ Caducadas / Error":
+    ofertas = [o for o in ofertas_raw if obtener_estado_efectivo(o) == "CADUCADA"]
+elif vista_seleccionada == "⭐ Guardadas":
+    ofertas = [o for o in ofertas_raw if obtener_estado_efectivo(o) == "GUARDADA"]
+else:
+    ofertas = ofertas_raw
 
 if ofertas:
     # Filtro opcional: solo minería
@@ -975,55 +997,88 @@ if ofertas:
     for oferta in ofertas_pagina:
         url = render_offer_card(oferta)
         oferta_id = oferta.get("id", "")
-        estado_actual = oferta.get("estado_postulacion", "NUEVA")
+        estado_efectivo = obtener_estado_efectivo(oferta)
 
         # Fila de acciones ergonómica y rápida
-        acol1, acol2, acol3, acol4 = st.columns([1, 1.2, 1, 1.2])
+        if estado_efectivo in ("NUEVA", "GUARDADA"):
+            acol1, acol2, acol3, acol4, acol5 = st.columns([1, 1.1, 1, 1.3, 1])
 
-        with acol1:
-            if url:
-                st.link_button("Ver Oferta 🔗", url, use_container_width=True)
+            with acol1:
+                if url:
+                    st.link_button("Ver Oferta 🔗", url, use_container_width=True)
 
-        with acol2:
-            if st.button("📋 Copiar Ficha", key=f"copy_{oferta_id}", use_container_width=True):
-                ats_list = oferta.get('keywords_ats', [])
-                if isinstance(ats_list, str):
-                    try:
-                        ats_list = json.loads(ats_list)
-                    except Exception:
-                        ats_list = []
+            with acol2:
+                if st.button("📋 Copiar Ficha", key=f"copy_{oferta_id}", use_container_width=True):
+                    ats_list = oferta.get('keywords_ats', [])
+                    if isinstance(ats_list, str):
+                        try:
+                            ats_list = json.loads(ats_list)
+                        except Exception:
+                            ats_list = []
 
-                ficha = (
-                    f"CARGO: {oferta.get('titulo', '')}\n"
-                    f"EMPRESA: {oferta.get('empresa', '')}\n"
-                    f"MATCH: {oferta.get('score_match', '')}%\n"
-                    f"VEREDICTO: {oferta.get('veredicto', '')}\n"
-                    f"PRETENSIÓN SUGERIDA: {oferta.get('pretension_sugerida', '')}\n"
-                    f"ENFOQUE CV: {oferta.get('enfoque_cv_sugerido', '')}\n"
-                    f"KEYWORDS ATS: {', '.join(ats_list)}\n"
-                    f"URL: {url}\n"
-                )
-                st.code(ficha, language="text")
+                    ficha = (
+                        f"CARGO: {oferta.get('titulo', '')}\n"
+                        f"EMPRESA: {oferta.get('empresa', '')}\n"
+                        f"MATCH: {oferta.get('score_match', '')}%\n"
+                        f"VEREDICTO: {oferta.get('veredicto', '')}\n"
+                        f"PRETENSIÓN SUGERIDA: {oferta.get('pretension_sugerida', '')}\n"
+                        f"ENFOQUE CV: {oferta.get('enfoque_cv_sugerido', '')}\n"
+                        f"KEYWORDS ATS: {', '.join(ats_list)}\n"
+                        f"URL: {url}\n"
+                    )
+                    st.code(ficha, language="text")
 
-        with acol3:
-            # Acción principal de descarte o restauración según el estado
-            if estado_actual == "DESCARTADA":
-                if st.button("↩️ Restaurar", key=f"btn_rest_{oferta_id}", type="primary", use_container_width=True, help="Restaura esta oferta a Por Revisar"):
-                    ejecutar_cambio_estado(oferta, "NUEVA")
-            elif estado_actual == "POSTULADO":
-                if st.button("↩️ Reabrir", key=f"btn_reopen_{oferta_id}", use_container_width=True, help="Regresa la oferta a Por Revisar"):
-                    ejecutar_cambio_estado(oferta, "NUEVA")
-            else:
-                if st.button("🗑️ Descartar", key=f"btn_desc_{oferta_id}", use_container_width=True, help="Descarta la oferta y la saca de la vista actual"):
+            with acol3:
+                if st.button("🗑️ Descartar", key=f"btn_desc_{oferta_id}", use_container_width=True, help="Descarta porque no se ajusta a tus preferencias (alimenta el aprendizaje de IA)"):
                     ejecutar_cambio_estado(oferta, "DESCARTADA")
 
-        with acol4:
-            if estado_actual in ("NUEVA", "GUARDADA"):
-                if st.button("📮 Postulé", key=f"btn_post_{oferta_id}", type="primary", use_container_width=True, help="Marca que postulaste a esta oferta"):
+            with acol4:
+                if st.button("⚠️ Caducada / Error", key=f"btn_cadu_{oferta_id}", use_container_width=True, help="Oferta expirada, caída o que da error de enlace. NO afectará el aprendizaje de IA"):
+                    ejecutar_cambio_estado(oferta, "CADUCADA")
+
+            with acol5:
+                if st.button("📮 Postulé", key=f"btn_post_{oferta_id}", type="primary", use_container_width=True, help="Marca que postulaste (alimenta el aprendizaje positivo)"):
                     ejecutar_cambio_estado(oferta, "POSTULADO")
-            else:
-                estados_opciones = ["NUEVA", "GUARDADA", "POSTULADO", "DESCARTADA"]
-                idx = estados_opciones.index(estado_actual) if estado_actual in estados_opciones else 0
+        else:
+            # Vista para ofertas Descartadas, Caducadas o Postuladas
+            acol1, acol2, acol3, acol4 = st.columns([1, 1.2, 1.2, 1.2])
+
+            with acol1:
+                if url:
+                    st.link_button("Ver Oferta 🔗", url, use_container_width=True)
+
+            with acol2:
+                if st.button("📋 Copiar Ficha", key=f"copy_{oferta_id}", use_container_width=True):
+                    ats_list = oferta.get('keywords_ats', [])
+                    if isinstance(ats_list, str):
+                        try:
+                            ats_list = json.loads(ats_list)
+                        except Exception:
+                            ats_list = []
+
+                    ficha = (
+                        f"CARGO: {oferta.get('titulo', '')}\n"
+                        f"EMPRESA: {oferta.get('empresa', '')}\n"
+                        f"MATCH: {oferta.get('score_match', '')}%\n"
+                        f"VEREDICTO: {oferta.get('veredicto', '')}\n"
+                        f"PRETENSIÓN SUGERIDA: {oferta.get('pretension_sugerida', '')}\n"
+                        f"ENFOQUE CV: {oferta.get('enfoque_cv_sugerido', '')}\n"
+                        f"KEYWORDS ATS: {', '.join(ats_list)}\n"
+                        f"URL: {url}\n"
+                    )
+                    st.code(ficha, language="text")
+
+            with acol3:
+                if estado_efectivo in ("DESCARTADA", "CADUCADA"):
+                    if st.button("↩️ Restaurar al Radar", key=f"btn_rest_{oferta_id}", type="primary", use_container_width=True, help="Regresa esta oferta a Por Revisar"):
+                        ejecutar_cambio_estado(oferta, "NUEVA")
+                elif estado_efectivo == "POSTULADO":
+                    if st.button("↩️ Reabrir", key=f"btn_reopen_{oferta_id}", use_container_width=True, help="Regresa la oferta a Por Revisar"):
+                        ejecutar_cambio_estado(oferta, "NUEVA")
+
+            with acol4:
+                estados_opciones = ["NUEVA", "GUARDADA", "POSTULADO", "DESCARTADA", "CADUCADA"]
+                idx = estados_opciones.index(estado_efectivo) if estado_efectivo in estados_opciones else 0
                 nuevo_st = st.selectbox(
                     "Estado",
                     options=estados_opciones,
@@ -1031,7 +1086,7 @@ if ofertas:
                     key=f"sel_st_{oferta_id}",
                     label_visibility="collapsed",
                 )
-                if nuevo_st != estado_actual:
+                if nuevo_st != estado_efectivo:
                     ejecutar_cambio_estado(oferta, nuevo_st)
 
         st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)

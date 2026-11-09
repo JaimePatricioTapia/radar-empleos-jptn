@@ -235,7 +235,7 @@ def obtener_metricas_resumen() -> dict:
     # Consulta única agregada para máxima velocidad (evita 4 round trips HTTP)
     res = (
         client.table("ofertas_laborales")
-        .select("id, estado_postulacion, veredicto")
+        .select("id, estado_postulacion, veredicto, rol_detectado")
         .execute()
     )
     data = res.data or []
@@ -243,8 +243,19 @@ def obtener_metricas_resumen() -> dict:
     totales = len(data)
     recomendadas = sum(1 for o in data if o.get("veredicto") == "POSTULAR")
     postulados = sum(1 for o in data if o.get("estado_postulacion") == "POSTULADO")
-    descartadas = sum(1 for o in data if o.get("estado_postulacion") == "DESCARTADA")
     guardadas = sum(1 for o in data if o.get("estado_postulacion") == "GUARDADA")
+
+    # Separar descartadas reales de ofertas caducadas/error
+    caducadas = sum(
+        1 for o in data
+        if o.get("estado_postulacion") == "CADUCADA"
+        or str(o.get("rol_detectado", "")).startswith("[CADUCADA]")
+    )
+    descartadas = sum(
+        1 for o in data
+        if o.get("estado_postulacion") == "DESCARTADA"
+        and not str(o.get("rol_detectado", "")).startswith("[CADUCADA]")
+    )
     por_revisar = sum(
         1 for o in data
         if o.get("estado_postulacion") == "NUEVA"
@@ -256,26 +267,38 @@ def obtener_metricas_resumen() -> dict:
         "recomendadas_postular": recomendadas,
         "postulados": postulados,
         "descartadas": descartadas,
+        "caducadas": caducadas,
         "guardadas": guardadas,
         "por_revisar": por_revisar,
     }
 
 
 # ---------------------------------------------------------------------------
-# Actualización de estado
+# Actualización de estado y helpers
 # ---------------------------------------------------------------------------
+
+def obtener_estado_efectivo(oferta: dict) -> str:
+    """Devuelve el estado real de la oferta, considerando el tag [CADUCADA]."""
+    estado = oferta.get("estado_postulacion", "NUEVA")
+    rol = str(oferta.get("rol_detectado", ""))
+    if estado == "CADUCADA" or rol.startswith("[CADUCADA]"):
+        return "CADUCADA"
+    return estado
+
 
 def actualizar_estado_oferta(oferta_id: str, nuevo_estado: str) -> bool:
     """Actualiza el estado de postulación de una oferta.
+    Soporta 'CADUCADA' de forma nativa o con fallback seguro para no violar
+    el constraint de Supabase si aún no ha sido ampliado.
 
     Args:
         oferta_id: UUID de la oferta.
-        nuevo_estado: Uno de 'NUEVA', 'GUARDADA', 'POSTULADO', 'DESCARTADA'.
+        nuevo_estado: Uno de 'NUEVA', 'GUARDADA', 'POSTULADO', 'DESCARTADA', 'CADUCADA'.
 
     Returns:
         True si se actualizó correctamente.
     """
-    estados_validos = {"NUEVA", "GUARDADA", "POSTULADO", "DESCARTADA"}
+    estados_validos = {"NUEVA", "GUARDADA", "POSTULADO", "DESCARTADA", "CADUCADA"}
     if nuevo_estado not in estados_validos:
         raise ValueError(
             f"Estado inválido: '{nuevo_estado}'. "
@@ -283,14 +306,57 @@ def actualizar_estado_oferta(oferta_id: str, nuevo_estado: str) -> bool:
         )
 
     client = _get_client()
-    result = (
-        client.table("ofertas_laborales")
-        .update({"estado_postulacion": nuevo_estado})
-        .eq("id", oferta_id)
-        .execute()
-    )
 
-    return len(result.data) > 0
+    # Si se restaura a NUEVA, POSTULADO o GUARDADA, limpiar prefijo [CADUCADA] si existía
+    if nuevo_estado in ("NUEVA", "POSTULADO", "GUARDADA"):
+        try:
+            oferta_res = (
+                client.table("ofertas_laborales")
+                .select("rol_detectado")
+                .eq("id", oferta_id)
+                .limit(1)
+                .execute()
+            )
+            if oferta_res.data:
+                rol_actual = oferta_res.data[0].get("rol_detectado") or ""
+                if rol_actual.startswith("[CADUCADA]"):
+                    limpio = rol_actual.replace("[CADUCADA]", "").strip()
+                    client.table("ofertas_laborales").update({"rol_detectado": limpio}).eq("id", oferta_id).execute()
+        except Exception:
+            pass
+
+    # Intentar actualización nativa
+    try:
+        result = (
+            client.table("ofertas_laborales")
+            .update({"estado_postulacion": nuevo_estado})
+            .eq("id", oferta_id)
+            .execute()
+        )
+        return len(result.data) > 0
+    except Exception as e:
+        # Fallback si el constraint de Supabase aún no tiene 'CADUCADA' habilitado
+        if nuevo_estado == "CADUCADA":
+            oferta_res = (
+                client.table("ofertas_laborales")
+                .select("rol_detectado")
+                .eq("id", oferta_id)
+                .limit(1)
+                .execute()
+            )
+            rol_actual = oferta_res.data[0].get("rol_detectado") or "" if oferta_res.data else ""
+            nuevo_rol = f"[CADUCADA] {rol_actual}" if not rol_actual.startswith("[CADUCADA]") else rol_actual
+            result = (
+                client.table("ofertas_laborales")
+                .update({
+                    "estado_postulacion": "DESCARTADA",
+                    "rol_detectado": nuevo_rol
+                })
+                .eq("id", oferta_id)
+                .execute()
+            )
+            return len(result.data) > 0
+        raise e
 
 
 # ---------------------------------------------------------------------------
@@ -298,13 +364,14 @@ def actualizar_estado_oferta(oferta_id: str, nuevo_estado: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def obtener_ofertas_aprendizaje(limite: int = 50) -> dict:
-    """Recupera ofertas con estado POSTULADO y DESCARTADA para análisis de patrones.
+    """Recupera ofertas con estado POSTULADO y DESCARTADA para análisis de patrones,
+    excluyendo estrictamente las ofertas caducadas o con error para no viciar el aprendizaje.
 
     Args:
         limite: Número máximo de ofertas por categoría a recuperar.
 
     Returns:
-        dict con listas 'postuladas' y 'descartadas'.
+        dict con listas 'postuladas' y 'descartadas' limpias.
     """
     client = _get_client()
     postuladas = (
@@ -315,16 +382,24 @@ def obtener_ofertas_aprendizaje(limite: int = 50) -> dict:
         .limit(limite)
         .execute()
     )
-    descartadas = (
+    # Traemos más para poder filtrar las caducadas y aún tener suficientes muestras
+    descartadas_raw = (
         client.table("ofertas_laborales")
         .select("id, titulo, empresa, modalidad, ubicacion, rol_detectado, score_match, keywords_ats, fortalezas, brechas, veredicto")
         .eq("estado_postulacion", "DESCARTADA")
         .order("fecha_extraccion", desc=True)
-        .limit(limite)
+        .limit(limite * 2)
         .execute()
     )
+
+    # Filtro estricto: excluir cualquier oferta caducada o con error
+    descartadas_limpias = [
+        o for o in (descartadas_raw.data or [])
+        if not str(o.get("rol_detectado", "")).startswith("[CADUCADA]")
+    ][:limite]
+
     return {
         "postuladas": postuladas.data or [],
-        "descartadas": descartadas.data or [],
+        "descartadas": descartadas_limpias,
     }
 

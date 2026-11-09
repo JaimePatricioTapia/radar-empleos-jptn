@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS ofertas_laborales (
     keywords_ats JSONB DEFAULT '[]'::jsonb,
     renta_estimada_empresa TEXT,
     pretension_sugerida TEXT,
-    estado_postulacion TEXT DEFAULT 'NUEVA' CHECK (estado_postulacion IN ('NUEVA', 'GUARDADA', 'POSTULADO', 'DESCARTADA')),
+    estado_postulacion TEXT DEFAULT 'NUEVA' CHECK (estado_postulacion IN ('NUEVA', 'GUARDADA', 'POSTULADO', 'DESCARTADA', 'CADUCADA')),
     fecha_publicacion TEXT,
     fecha_extraccion TIMESTAMPTZ DEFAULT NOW()
 );
